@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' ithil: data:; media-src 'self' blob: data:; style-src 'self' 'unsafe-inline'; script-src 'self'; font-src 'self'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' ithil: data: blob:; media-src 'self' blob: data:; style-src 'self' 'unsafe-inline'; script-src 'self' ithil: 'wasm-unsafe-eval'; font-src 'self'; connect-src 'self' ithil: data: blob:">
 <title>Hearth AI</title>
 <link rel="stylesheet" href="fonts/fonts.css">
 <link rel="stylesheet" href="styles.css">
@@ -33,6 +33,7 @@
   <div class="content" id="content"></div>
 </div>
 <audio id="voice-audio"></audio>
+<script src="vendor/stage.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

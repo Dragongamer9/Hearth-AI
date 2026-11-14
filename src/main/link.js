@@ -144,11 +144,13 @@ class Link {
 
     if (req.method === 'GET' && u.pathname === '/v1/avatar') {
       const expr = require('./mind/view').expression(this.mind).toLowerCase();
-      const file = path.join(this.store.p('avatar'), expr + '.png');
+      const av = this.settings.get().avatar;
+      const live = path.join(this.store.p('avatar'), 'live.png');
+      const file = (av.bodyType === 'vrm' || av.bodyType === 'live2d') && fs.existsSync(live) ? live : path.join(this.store.p('avatar'), expr + '.png');
       const alt = path.join(this.store.p('avatar'), 'calm.png');
       const f = fs.existsSync(file) ? file : fs.existsSync(alt) ? alt : null;
       if (!f) return this.send(res, 404, { error: 'She hasn’t been drawn yet.' });
-      res.writeHead(200, { 'content-type': 'image/png', 'cache-control': 'no-store', 'x-expression': expr, 'x-framing': (this.settings.get().avatar.framing || 'full') });
+      res.writeHead(200, { 'content-type': 'image/png', 'cache-control': 'no-store', 'x-expression': expr, 'x-framing': (av.bodyType === 'vrm' || av.bodyType === 'live2d' ? (av.camera || 'full') : (av.framing || 'full')) });
       return fs.createReadStream(f).pipe(res);
     }
 

@@ -132,7 +132,8 @@ function snapshot(mind, extra) {
     { key: 'time', name: 'Time sense', what: 'Knows the time, how long she was asleep or off' },
     { key: 'hearing', name: 'Hearing', what: 'Microphone, only when you press talk' },
     { key: 'sight', name: 'Sight', what: 'Screenshots of her own window or a webcam' },
-    { key: 'presence', name: 'Presence', what: 'Notices when you’re at the PC' }
+    { key: 'presence', name: 'Presence', what: 'Notices when you’re at the PC' },
+    { key: 'body', name: 'Seeing her body', what: 'Looks at her own 3D or Live2D body on screen' }
   ].map((x2) => Object.assign(x2, { on: !!st.senses[x2.key], state: st.senses[x2.key] ? 'On' : 'Off' }));
 
   // ---------- Dreams ----------
@@ -237,7 +238,7 @@ function snapshot(mind, extra) {
       can: CAN, never: NEVER, folders: mind.rules.folders
     },
 
-    avatar: { settings: av, expression: expr, faces, portrait: exprFile(expr) || fileUrl(store, path.join(avDir, 'calm.png')), blink: fileUrl(store, path.join(avDir, 'blink.png')), talking: fileUrl(store, path.join(avDir, 'talking.png')), suggestion: s.lookSuggestion, opinion: s.lookOpinion || null, drawing: !!x.drawing, comfyOk: x.comfyOk !== false },
+    avatar: { settings: av, expression: expr, talking: now < s.talkingUntil, intent: s.body && (s.body.until > now || now - (s.body.gestureAt || 0) < 15000) ? s.body : null, bodyLog: (s.bodyLog || []).slice(0, 3), bodySeen: s.bodySeen, faces, portrait: exprFile(expr) || fileUrl(store, path.join(avDir, 'calm.png')), blink: fileUrl(store, path.join(avDir, 'blink.png')), talking: fileUrl(store, path.join(avDir, 'talking.png')), suggestion: s.lookSuggestion, opinion: s.lookOpinion || null, drawing: !!x.drawing, comfyOk: x.comfyOk !== false },
 
     settings: st
   };

@@ -12,7 +12,8 @@ const CAN = [
   'Pick her own goals and start tasks',
   'Read and write files in the folders you allow',
   'Make her own git branches and commits there',
-  'Read the web to learn'
+  'Read the web to learn',
+  'Move her own body and look at herself'
 ];
 
 const NEVER = [
@@ -98,7 +99,7 @@ class Rules {
     const a = action || {};
     const deny = (rule, why) => ({ ok: false, rule, why });
     switch (a.type) {
-      case 'think': case 'journal': case 'talk': case 'wish': case 'free_time': case 'draw': case 'web_read':
+      case 'think': case 'journal': case 'talk': case 'wish': case 'free_time': case 'draw': case 'web_read': case 'body': case 'see_body':
         return { ok: true };
       case 'read_file': case 'list_dir':
         if (!a.path) return deny(null, 'No path given.');

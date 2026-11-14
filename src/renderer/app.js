@@ -75,6 +75,7 @@ const shells = {
     </form>
   </section>
   <aside class="talk-aside" aria-label="Her state while talking">
+    <div data-part="talkbody"></div>
     <div style="display:flex;flex-direction:column;gap:10px"><h2>Right now</h2><div data-part="drives" style="display:flex;flex-direction:column;gap:10px"></div></div>
     <div style="display:flex;flex-direction:column;gap:10px"><h2>Memories she's using</h2><div data-part="using" style="display:flex;flex-direction:column;gap:10px"></div></div>
     <div style="display:flex;flex-direction:column;gap:10px"><h2>Saving from this talk</h2><div data-part="saving" style="display:flex;flex-direction:column;gap:10px"></div></div>
@@ -85,31 +86,57 @@ const shells = {
   avatar: (s) => `
 <main>
   <div class="row">
-    <div class="head"><h1>Avatar</h1><div class="sub">${esc(s.name)}'s face and voice. Her expression follows her real mood and drives, so you can see how she's feeling at a glance. She's drawn on your PC with ComfyUI.</div></div>
-    <div class="btns"><button type="button" class="btn" data-act="redraw" data-part="redrawbtn">Redraw her</button><button type="button" class="btn primary" data-act="savelook">Save look</button></div>
+    <div class="head"><h1>Avatar</h1><div class="sub" style="max-width:760px">${esc(s.name)}'s body and voice. Pick how she's shown: a real 3D body, a Live2D anime body, or pictures drawn by ComfyUI. Whichever you pick, she moves, blinks, lip-syncs and shows her real mood.</div></div>
+    <div class="btns"><button type="button" class="btn" data-act="importany">Import a model</button><button type="button" class="btn primary" data-act="savelook">Save look</button></div>
   </div>
-  <div data-part="comfywarn"></div>
+  <div data-part="warn"></div>
+  <div class="btns" style="gap:8px" role="group" aria-label="Body type" data-part="bodytypes"></div>
   <div style="display:flex;flex-wrap:wrap;gap:24px">
-    <section class="stage" aria-label="Live avatar">
-      <div class="rowc" style="gap:8px"><span class="chip live" data-part="livechip"></span><span class="muted">Blinks, breathes, looks at you when you talk</span></div>
-      <div class="portrait" data-part="portrait" role="img" aria-label="Ithil's portrait"></div>
-      <div style="display:flex;flex-direction:column;gap:10px"><div class="muted14" style="color:var(--muted2)">Expressions (picked by her mood)</div><div class="faces" data-part="faces"></div></div>
+    <section class="stage" aria-label="Live view" style="flex:1 1 520px;gap:16px">
+      <div class="rowc" style="gap:8px"><span class="chip live" data-part="livechip"></span><span class="muted" data-part="hint"></span></div>
+      <div class="view3d scene-moon" id="avatar-view" role="img" aria-label="Ithil">
+        <span class="moon" aria-hidden="true"></span><span class="fire" aria-hidden="true"></span>
+        <div class="stage-host" id="avatar-host"></div>
+        <div data-part="viewfill" class="view-fill"></div>
+        <span class="model-tag" data-part="modeltag"></span>
+        <div class="view-ctl" data-part="viewctl"></div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <div class="muted14" style="color:var(--muted2)">What she does on her own</div>
+        <div class="btns" style="gap:8px" data-part="moves"></div>
+        <div class="muted">She breathes and sways when idle, blinks, looks at you when you talk, nods while listening, and moves her mouth with her voice. Her mood picks her face and posture: slumped when tired, leaning in when curious.</div>
+        <div data-part="selflook"></div>
+      </div>
     </section>
     <div style="flex:1 1 380px;display:flex;flex-direction:column;gap:24px">
-      <section class="card" aria-label="Her look" style="gap:16px">
-        <h2>Her look</h2>
-        <div style="display:flex;flex-direction:column;gap:8px"><div class="muted14" style="color:var(--muted2)">Style</div><div class="btns" style="gap:8px" role="group" aria-label="Avatar style" data-part="styles"></div></div>
-        <div style="display:flex;flex-direction:column;gap:8px"><div class="muted14" style="color:var(--muted2)">Show</div><div class="btns" style="gap:8px" role="group" aria-label="How much of her to draw" data-part="framing"></div></div>
-        <div style="display:flex;flex-direction:column;gap:8px"><div class="muted14" style="color:var(--muted2)">Start from a character</div><div class="roster" data-part="roster"></div></div>
-        <div style="display:flex;flex-direction:column;gap:12px"><div class="muted14" style="color:var(--muted2)">Character creator</div><div data-part="creator"></div></div>
+      <section class="card" aria-label="Her models"><h2>Her models</h2><div data-part="models" style="display:flex;flex-direction:column;gap:12px"></div>
+        <div class="btns"><button type="button" class="btn sm dash" data-act="importvrm">Add a .vrm file</button><button type="button" class="btn sm dash" data-act="importl2d">Add a Live2D folder</button></div>
+        <div class="muted">When you add a model, its license file is read and shown here. Models stay on your PC.</div></section>
+      <div data-part="drawncard"></div>
+      <section class="card" aria-label="Make her own 3D body" style="gap:12px"><h2>Make her own 3D body</h2>
+        <div style="display:flex;flex-direction:column;gap:8px">
+          <div class="step"><span>1</span><span>Open <a href="#" data-act="vroid">VRoid Studio</a> (free) and start a new character.</span></div>
+          <div class="step"><span>2</span><span>Copy her look from the box below: hair, eyes, outfit, colors.</span></div>
+          <div class="step"><span>3</span><span>Export as VRM.</span></div>
+          <div class="step"><span>4</span><span>Press “Add a .vrm file” and pick it. She checks out her new body.</span></div>
+        </div>
+        <div class="mini" style="font-size:13px;color:var(--text2)" data-part="lookbox"></div></section>
+    </div>
+  </div>
+  <div class="grid g340">
+    <section class="card" aria-label="Mood to face and pose" style="gap:12px"><h2>Mood → face and pose</h2><div data-part="moodmap"></div>
+      <div class="muted">Faces come from the model (VRM expressions or Live2D expression files). You can change what each mood uses.</div></section>
+    <div style="display:flex;flex-direction:column;gap:24px">
+      <section class="card" aria-label="Scene" style="gap:12px"><h2>Scene</h2>
+        <div class="btns" style="gap:8px" role="group" aria-label="Background" data-part="scenes"></div>
         <label class="check"><input type="checkbox" data-set="avatar.letHerSuggest" id="let-suggest">Let her suggest changes to how she looks</label>
-      </section>
-      <section class="card" aria-label="What she thinks of her look" style="gap:12px"><h2>What she thinks of it</h2><div data-part="opinion"></div></section>
+        <label class="check"><input type="checkbox" data-set="avatar.smooth" id="smooth-motion">Smooth motion (uses a little GPU)</label></section>
+      <section class="card" aria-label="What she thinks of it" style="gap:12px"><h2>What she thinks of it</h2><div data-part="opinion"></div></section>
     </div>
   </div>
   <div class="grid g340">
     <section class="card" aria-label="Her voice"><h2>Her voice</h2><div data-part="voices" style="display:flex;flex-direction:column;gap:14px"></div>
-      <div class="muted">Runs locally on your PC. Her mouth moves with her voice, and her tone shifts with her mood: quieter when she's tired, faster when she's excited.</div></section>
+      <div class="muted">Runs locally on your PC. Her mouth shapes follow the sounds she makes (A, I, U, E, O), and her tone shifts with her mood.</div></section>
     <section class="card" aria-label="Where she shows up" style="gap:12px"><h2>Where she shows up</h2><div data-part="places"></div></section>
   </div>
 </main>`,
@@ -287,7 +314,7 @@ const shells = {
 /* ---------------- parts ---------------- */
 const parts = {
   mind: {
-    orb: (s) => { const o = orbStyle(s, 72); return '<div aria-hidden="true" class="' + o.cls + ' breathing" style="' + o.style + '"></div>'; },
+    orb: (s) => { if (isLive(s) && s.avatar.settings.places.mind) return '<div class="orb face-host" id="mind-face-host" aria-hidden="true" style="width:72px;height:72px"></div>'; const o = orbStyle(s, 72); return '<div aria-hidden="true" class="' + o.cls + ' breathing" style="' + o.style + '"></div>'; },
     name: (s) => esc(s.name),
     chips: (s) => '<span class="chip live">' + esc(s.statusChip) + '</span><span class="chip">' + esc(s.aliveLabel) + '</span><span class="chip">' + esc(s.autonomy) + '</span>',
     talkbtn: (s) => 'Talk to ' + esc(s.name),
@@ -331,33 +358,81 @@ const parts = {
       if (ui.waitingReply) out += '<div class="her"><div class="bubble" style="color:var(--muted)">…</div></div>';
       return out || '<div class="empty" style="align-self:center">Say hi. She’s been waiting.</div>';
     },
+    talkbody: (s) => (isLive(s) && s.avatar.settings.places.talk ? '<div class="talk-body view3d scene-' + esc(s.avatar.settings.scene || 'moon') + '"><span class="moon" aria-hidden="true"></span><span class="fire" aria-hidden="true"></span><div class="stage-host" id="talk-host"></div></div>' : ''),
     drives: (s) => s.talk.drives.map((d) => meter(d, 's8')).join(''),
     using: (s) => s.talk.using.length ? s.talk.using.map((t) => '<div class="mini">' + esc(t) + '</div>').join('') : '<div class="empty">None yet.</div>',
     saving: (s) => s.talk.saving.length ? s.talk.saving.map((t) => '<div class="mini amber">' + esc(t) + '</div>').join('') : '<div class="empty">Nothing yet.</div>'
   },
   avatar: {
-    redrawbtn: (s) => (s.avatar.drawing ? 'Drawing… ' + (s.drawProgress ? (s.drawProgress.i + 1) + '/' + s.drawProgress.n : '') : 'Redraw her'),
-    comfywarn: (s) => (s.avatar.comfyOk ? '' : '<div class="banner">ComfyUI isn’t reachable at ' + esc(s.settings.comfyUrl) + '. Start it to draw her.</div>'),
+    warn: (s) => {
+      const t = s.avatar.settings.bodyType;
+      if (t === 'drawn' && !s.avatar.comfyOk) return '<div class="banner">ComfyUI isn’t reachable at ' + esc(s.settings.comfyUrl) + '. Start it to draw her.</div>';
+      if (ui.stageError) return '<div class="banner">' + esc(ui.stageError) + '</div>';
+      return '';
+    },
+    bodytypes: (s) => [['vrm', '3D body (VRM)'], ['live2d', 'Live2D (anime)'], ['drawn', 'Drawn (ComfyUI)'], ['orb', 'Moon orb']].map(([k, l]) => '<button type="button" class="bt" aria-pressed="' + (s.avatar.settings.bodyType === k) + '" data-act="bodytype" data-v="' + k + '">' + l + '</button>').join(''),
     livechip: (s) => '● Live · ' + esc(s.current.mood || s.avatar.expression.toLowerCase()),
-    portrait: (s) => {
-      const av = s.avatar;
-      if (av.settings.style === 'Moon orb') return '<span class="moon" aria-hidden="true"></span><div class="orb big-orb breathing" aria-hidden="true"></div><span class="cap">Moon orb</span>';
-      if (av.portrait) return '<img id="portrait-img" class="breathing" alt="" src="' + esc(av.portrait) + '">' + (av.blink ? '<img id="blink-img" alt="" src="' + esc(av.blink) + '" style="opacity:0">' : '') + (av.talking ? '<img id="talk-img" alt="" src="' + esc(av.talking) + '" style="opacity:0">' : '');
-      return '<span class="moon" aria-hidden="true"></span><div class="ghost" aria-hidden="true"></div><span class="cap">Not drawn yet · press Redraw her</span>';
+    hint: (s) => (isLive(s) ? (s.avatar.settings.bodyType === 'live2d' ? 'Move the pointer and she looks · scroll to zoom' : 'Drag to turn her · scroll to zoom') : s.avatar.settings.bodyType === 'drawn' ? 'Blinks, breathes, looks at you when you talk' : ''),
+    viewfill: (s) => {
+      const t = s.avatar.settings.bodyType, av = s.avatar;
+      if (t === 'orb') return '<div class="orb big-orb breathing" aria-hidden="true" style="margin:auto"></div>';
+      if (t === 'drawn') {
+        if (av.portrait) return '<img id="portrait-img" class="breathing" alt="" src="' + esc(av.portrait) + '">' + (av.blink ? '<img id="blink-img" alt="" src="' + esc(av.blink) + '" style="opacity:0">' : '') + (av.talking ? '<img id="talk-img" alt="" src="' + esc(av.talking) + '" style="opacity:0">' : '');
+        return '<div class="ghost" aria-hidden="true" style="margin:auto auto 40px"></div>';
+      }
+      if (!s.models || !s.models.current) return '<div class="view-empty"><div style="font-size:16px;font-weight:600">No ' + (t === 'live2d' ? 'Live2D' : '3D') + ' body yet</div><div class="muted14">' + (t === 'live2d' ? 'Add a Live2D folder on the right.' : 'Make her in VRoid Studio, or add any .vrm on the right.') + '</div></div>';
+      if (ui.stageLoading) return '<div class="view-empty"><div class="muted14">Loading her body…</div></div>';
+      return '';
     },
-    faces: (s) => s.avatar.faces.map((f) => '<div class="face' + (f.on ? ' on' : '') + '"><div class="c" role="img" aria-label="' + esc(f.label) + ' expression"' + (f.img ? " style=\"background-image:url('" + esc(f.img) + "');" + faceCrop(s) + "\"" : '') + '></div><span style="color:' + (f.on ? 'var(--text)' : 'var(--muted)') + '">' + esc(f.label) + '</span></div>').join(''),
-    framing: (s) => [['full', 'Full body'], ['portrait', 'Head & shoulders']].map(([k, l]) => '<button type="button" class="pill" aria-pressed="' + ((s.avatar.settings.framing || 'full') === k) + '" data-act="framing" data-v="' + k + '">' + l + '</button>').join(''),
-    styles: (s) => ['Anime', 'Semi-real', '3D', 'Moon orb'].map((x) => '<button type="button" class="pill" aria-pressed="' + (s.avatar.settings.style === x) + '" data-act="style" data-v="' + x + '">' + x + '</button>').join(''),
-    roster: (s) => {
-      const bg = { Moonlit: 'linear-gradient(180deg,#3a4660,#1a2233)', Scholar: 'linear-gradient(180deg,#4a3e2e,#221c15)', Ranger: 'linear-gradient(180deg,#2e4a36,#15221a)', Tinkerer: 'linear-gradient(180deg,#4a2e3e,#22151c)' };
-      return Object.keys(s.roster).map((n) => '<button type="button" aria-label="Pick ' + n + '" aria-pressed="' + (s.avatar.settings.roster === n) + '" data-act="roster" data-v="' + n + '"><span class="pic" aria-hidden="true" style="background:' + bg[n] + '"></span>' + n + '</button>').join('');
+    modeltag: (s) => { const t = s.avatar.settings.bodyType; return t === 'drawn' ? 'Drawn by ComfyUI' : t === 'orb' ? 'Moon orb' : s.models && s.models.current ? esc(s.models.current.name) + (t === 'vrm' ? ' · VRM' : ' · Live2D') : ''; },
+    viewctl: (s) => {
+      if (!isLive(s)) return '';
+      const cam = s.avatar.settings.camera || 'full';
+      return '<div class="btns" style="gap:6px" role="group" aria-label="Camera">' + [['full', 'Full body'], ['upper', 'Upper body'], ['face', 'Face']].map(([k, l]) => '<button type="button" class="vbtn" aria-pressed="' + (cam === k) + '" data-act="camera" data-v="' + k + '">' + l + '</button>').join('') + '</div><button type="button" class="vbtn" data-act="resetview">Reset view</button>';
     },
-    creator: (s) => {
+    moves: (s) => {
+      const talking = s.avatar.talking, live = isLive(s) || s.avatar.settings.bodyType === 'drawn';
+      const chips = [['Breathing', live], ['Blinking', live], ['Idle sway', isLive(s)], ['Looks at you', talking || ui.lookAt], ['Nods while listening', !!ui.listeningNow], ['Lip-sync', !!ui.speaking]];
+      return chips.map(([l, on]) => '<span class="move' + (on ? ' on' : '') + '">' + l + '</span>').join('');
+    },
+    models: (s) => {
+      const m = s.models; if (!m) return '';
+      const row = (o) => '<div class="model-row' + (o.using ? ' on' : '') + '"><div class="thumb" role="img" aria-label="' + esc(o.name) + ' thumbnail" style="' + (o.thumb ? "background-image:url('" + esc(o.thumb) + "')" : 'background:' + o.bg) + '"></div>' +
+        '<div style="display:flex;flex-direction:column;gap:4px;min-width:0;flex:1"><span style="font-size:15px;font-weight:600">' + esc(o.name) + '</span><span class="muted">' + esc(o.kindLabel) + '</span><span class="lic ' + licClass(o.license) + '" title="' + esc(o.licenseText || '') + '">' + esc(o.license) + '</span></div>' +
+        '<div style="display:flex;flex-direction:column;gap:6px;align-items:flex-end">' + o.action + '</div></div>';
+      const out = m.list.map((x) => row(Object.assign({}, x, { bg: 'linear-gradient(180deg,#cfd6e6 0 30%,#3a4660 30%)', action: x.using ? '<span style="font-size:13px;color:var(--sage-l)">Using</span>' : '<button type="button" class="btn sm" data-act="usemodel" data-id="' + esc(x.id) + '">Use</button>' + '<button type="button" class="linkbtn" data-act="rmmodel" data-id="' + esc(x.id) + '">Remove</button>' })));
+      if (m.archChan) out.push(row(Object.assign({}, m.archChan, { bg: 'linear-gradient(180deg,#5b8ed6 0 30%,#2a3550 30%)', action: '<button type="button" class="btn sm" data-act="getarch">Get it</button>' })));
+      out.push(row(Object.assign({}, m.drawn, { bg: 'linear-gradient(180deg,#24324a,#141916)', action: m.drawn.using ? '<span style="font-size:13px;color:var(--sage-l)">Using</span>' : '<button type="button" class="btn sm" data-act="usemodel" data-id="drawn">Use</button>' })));
+      return out.join('');
+    },
+    drawncard: (s) => {
+      if (s.avatar.settings.bodyType !== 'drawn') return '';
       const av = s.avatar.settings;
+      const bg = { Moonlit: 'linear-gradient(180deg,#3a4660,#1a2233)', Scholar: 'linear-gradient(180deg,#4a3e2e,#221c15)', Ranger: 'linear-gradient(180deg,#2e4a36,#15221a)', Tinkerer: 'linear-gradient(180deg,#4a2e3e,#22151c)' };
       const sw = { hair: guessColor(av.hair), eyes: guessColor(av.eyes), outfit: guessColor(av.outfit), nightOutfit: guessColor(av.nightOutfit === 'Same as day' ? av.outfit : av.nightOutfit), accent: av.accent === 'Hearth sage' ? '#9cc9a5' : guessColor(av.accent) };
-      return [['hair', 'Hair'], ['eyes', 'Eyes'], ['outfit', 'Outfit'], ['nightOutfit', 'Late-night outfit'], ['accent', 'Accent color']].map(([k, l]) =>
-        '<div class="creator-row"><label for="cr-' + k + '">' + l + '</label><span style="display:flex;align-items:center;gap:8px"><span class="swatch" style="background:' + sw[k] + '" aria-hidden="true"></span><input id="cr-' + k + '" data-avfield="' + k + '" value="' + esc(av[k]) + '"></span></div>').join('');
+      return '<section class="card" aria-label="Her drawn look" style="gap:16px"><div class="rowc"><h2>Her drawn look</h2><button type="button" class="btn sm" data-act="redraw">' + (s.avatar.drawing ? 'Drawing… ' + (s.drawProgress ? (s.drawProgress.i + 1) + '/' + s.drawProgress.n : '') : 'Redraw her') + '</button></div>' +
+        '<div class="btns" style="gap:8px" role="group" aria-label="Drawing style">' + ['Anime', 'Semi-real', '3D'].map((x) => '<button type="button" class="pill" aria-pressed="' + (av.style === x) + '" data-act="style" data-v="' + x + '">' + x + '</button>').join('') + '</div>' +
+        '<div class="btns" style="gap:8px" role="group" aria-label="How much of her to draw">' + [['full', 'Full body'], ['portrait', 'Head & shoulders']].map(([k, l]) => '<button type="button" class="pill" aria-pressed="' + ((av.framing || 'full') === k) + '" data-act="framing" data-v="' + k + '">' + l + '</button>').join('') + '</div>' +
+        '<div class="roster">' + Object.keys(s.roster).map((n) => '<button type="button" aria-label="Pick ' + n + '" aria-pressed="' + (av.roster === n) + '" data-act="roster" data-v="' + n + '"><span class="pic" aria-hidden="true" style="background:' + bg[n] + '"></span>' + n + '</button>').join('') + '</div>' +
+        '<div>' + [['hair', 'Hair'], ['eyes', 'Eyes'], ['outfit', 'Outfit'], ['nightOutfit', 'Late-night outfit'], ['accent', 'Accent color']].map(([k, l]) => '<div class="creator-row"><label for="cr-' + k + '">' + l + '</label><span style="display:flex;align-items:center;gap:8px"><span class="swatch" style="background:' + sw[k] + '" aria-hidden="true"></span><input id="cr-' + k + '" data-avfield="' + k + '" value="' + esc(av[k]) + '"></span></div>').join('') + '</div></section>';
     },
+    selflook: (s) => {
+      const a = s.avatar, out = [];
+      if (a.bodyLog && a.bodyLog.length) out.push('<div class="mini"><div style="font-size:13px;color:var(--muted);margin-bottom:4px">She moved herself</div>' + a.bodyLog.map((b) => esc(b.what) + (b.why ? ' <span class="muted">· ' + esc(b.why) + '</span>' : '')).join('<br>') + '</div>');
+      if (a.bodySeen) out.push('<div class="mini"><div style="font-size:13px;color:var(--muted);margin-bottom:4px">When she last looked at herself</div>“' + esc(a.bodySeen.thought || a.bodySeen.saw) + '”</div>');
+      return out.join('');
+    },
+    lookbox: (s) => { const a = s.avatar.settings; return 'Her look to copy in: ' + esc(a.hair.toLowerCase()) + ' hair · ' + esc(a.eyes.toLowerCase()) + ' eyes · ' + esc(a.outfit.toLowerCase()) + ' · ' + esc(a.accent === 'Hearth sage' ? 'sage' : a.accent.toLowerCase()) + ' accent'; },
+    moodmap: (s) => {
+      const faces = Object.assign({}, AvatarStage.DEFAULT_FACES, s.avatar.settings.faces || {});
+      const base = ui.stageExpressions && ui.stageExpressions.length ? ui.stageExpressions : ['neutral', 'happy', 'angry', 'sad', 'relaxed', 'surprised'];
+      const opts = [];
+      for (const e of base) { opts.push(e); if (!/^(blink|neutral)$/.test(e)) opts.push(e + ' (soft)'); }
+      opts.push('neutral + squint', 'relaxed + half blink');
+      return AvatarStage.MOODS.map((m) => { const cur = faces[m], on = s.avatar.expression === m; const list = opts.includes(cur) ? opts : [cur].concat(opts);
+        return '<div class="mood-row"><span style="display:flex;align-items:center;gap:8px">' + m + (on ? '<span class="nowtag">now</span>' : '') + '</span><label style="display:flex;align-items:center;gap:8px"><span class="sr">Face for ' + m + '</span><select data-mood="' + m + '">' + list.map((o) => '<option' + (o === cur ? ' selected' : '') + '>' + esc(o) + '</option>').join('') + '</select></label><span class="muted14" style="min-width:120px;text-align:right">' + esc(AvatarStage.POSES[m]) + '</span></div>'; }).join('');
+    },
+    scenes: (s) => [['moon', 'Moonlit room'], ['hearth', 'Hearth fireplace'], ['clear', 'See-through']].map(([k, l]) => '<button type="button" class="pill" aria-pressed="' + ((s.avatar.settings.scene || 'moon') === k) + '" data-act="scene" data-v="' + k + '">' + l + '</button>').join(''),
     opinion: (s) => {
       const a = s.avatar;
       if (a.suggestion) return '<p class="p">“' + esc(a.suggestion.text) + '”</p><div class="btns"><button type="button" class="btn sm primary" data-act="look-yes">Try her idea</button><button type="button" class="btn sm" data-act="look-no">Keep it as is</button></div>';
@@ -366,7 +441,7 @@ const parts = {
     voices: (s) => Object.keys(s.ttsVoices).map((k) => { const v = s.ttsVoices[k], on = s.avatar.settings.voice === k;
       return '<div class="voice-opt' + (on ? ' on' : '') + '" data-act="pickvoice" data-v="' + k + '"><button type="button" class="play" aria-label="Play ' + esc(v.name) + ' sample" data-act="sample" data-v="' + k + '">' + ICON_PLAY + '</button><div style="display:flex;flex-direction:column;gap:2px;min-width:0"><span style="font-size:15px;font-weight:600">' + esc(v.name) + '</span><span class="muted">' + esc(v.what) + '</span></div><span style="margin-left:auto;font-size:13px;color:var(--sage-l)">' + (on ? 'Picked' : '') + '</span></div>'; }).join(''),
     places: (s) => { const cc = s.link && s.link.connected;
-      return [['talk', 'Talk screen', 'Next to your chat with her'], ['buddy', 'Desktop buddy', 'Small floating ' + s.name + ' on your Hearth OS desktop'], ['mind', 'Mind screen', 'Replaces the orb at the top'], ['commandCenter', 'AI Command Center', cc ? 'Connected \u00b7 her face shows on your team' : 'When you connect it later']].map(([k, n, w]) =>
+      return [['talk', 'Talk screen', 'Her body next to your chat'], ['buddy', 'Desktop buddy', 'Her full ' + (s.avatar.settings.bodyType === 'vrm' ? '3D ' : '') + 'body standing on your Hearth OS desktop'], ['mind', 'Mind screen', 'Her face at the top'], ['commandCenter', 'AI Command Center', cc ? 'Connected · her face shows on your team' : 'When you connect it later']].map(([k, n, w]) =>
       '<label class="tog"><span class="t"><span class="n">' + esc(n) + '</span><span class="w">' + esc(w) + '</span></span><input type="checkbox" data-place="' + k + '"' + (s.avatar.settings.places[k] || (k === 'commandCenter' && cc) ? ' checked' : '') + (k === 'commandCenter' && !cc ? ' disabled' : '') + '></label>').join(''); }
   },
   attention: {
@@ -505,6 +580,70 @@ function guessColor(text) {
   return '#3a4660';
 }
 
+/* ---------------- her live body (3D / Live2D) ---------------- */
+function isLive(s) { const t = s.avatar.settings.bodyType; return (t === 'vrm' || t === 'live2d') && s.models && s.models.current; }
+function licClass(l) { return /^(Yours|CC0)/.test(l || '') ? 'ok' : /personal|License file|VRM license|CC BY/.test(l || '') ? 'mid' : 'warn'; }
+
+// Where her live body goes on each screen.
+function stageSpot(s) {
+  if (!isLive(s)) return null;
+  const av = s.avatar.settings;
+  if (ui.screen === 'avatar') return { host: 'avatar-host', camera: av.camera || 'full', interactive: true };
+  if (ui.screen === 'talk' && av.places.talk) return { host: 'talk-host', camera: 'upper', interactive: false };
+  if (ui.screen === 'mind' && av.places.mind) return { host: 'mind-face-host', camera: 'face', interactive: false };
+  return null;
+}
+
+async function syncStage(s) {
+  const spot = stageSpot(s);
+  const host = spot && document.getElementById(spot.host);
+  const cur = s.models && s.models.current;
+  const key = spot && host && cur ? [spot.host, cur.kind, cur.url, s.models.coreUrl || ''].join('|') : null;
+  if (ui.stage && (ui.stage.key !== key || !document.body.contains(ui.stage.host))) { try { ui.stage.inst && ui.stage.inst.destroy(); } catch (_) {} ui.stage = null; }
+  if (key && !ui.stage) {
+    if (cur.kind === 'live2d' && !s.models.coreUrl) {
+      if (!ui.coreAsked) { ui.coreAsked = true; const r = await H.ensureLive2dCore(); if (!r.ok) { ui.stageError = 'Couldn’t get the Live2D runtime from Live2D: ' + r.reason; } refresh(); }
+      return;
+    }
+    const entry = { key, host, inst: null, spot };
+    ui.stage = entry;
+    ui.stageLoading = true; ui.stageError = null;
+    try {
+      entry.inst = await AvatarStage.create(host, { kind: cur.kind, url: cur.url, coreUrl: s.models.coreUrl, camera: spot.camera, interactive: spot.interactive, smooth: s.avatar.settings.smooth !== false, faces: s.avatar.settings.faces, mood: s.avatar.expression });
+      if (ui.stage !== entry) { entry.inst.destroy(); return; }
+      ui.stageExpressions = entry.inst.expressions;
+      H.reportExpressions(entry.inst.expressions);
+      const m = s.models.list.find((x) => x.id === cur.id);
+      if (m && !m.thumb) setTimeout(() => { const d = entry.inst && entry.inst.snapshot(); if (d) H.saveModelThumb(cur.id, d); }, 1800);
+    } catch (e) {
+      if (ui.stage === entry) ui.stage = null;
+      ui.stageError = 'Couldn’t load her body: ' + (e.message || e);
+    } finally { ui.stageLoading = false; rebuildPart('viewfill'); rebuildPart('moodmap'); rebuildPart('warn'); render(); }
+  }
+  const inst = ui.stage && ui.stage.inst;
+  if (inst) {
+    const av = s.avatar.settings;
+    inst.setMood(s.avatar.expression, Object.assign({}, AvatarStage.DEFAULT_FACES, av.faces || {}));
+    inst.setSmooth(av.smooth !== false);
+    inst.setIntent(s.avatar.intent);
+    ui.lookAt = !!s.avatar.talking || Date.now() - (ui.typingAt || 0) < 4000;
+    inst.setLookAtUser(ui.lookAt);
+    ui.listeningNow = !!ui.recording || Date.now() - (ui.typingAt || 0) < 1500;
+    inst.setListening(ui.listeningNow);
+  }
+}
+function rebuildPart(name) { const el = $('[data-part="' + name + '"]'); if (el) el._html = null; }
+
+// Fresh pictures of her body: for the Command Center and for when she looks at herself.
+setInterval(() => {
+  const s = ui.snap, inst = ui.stage && ui.stage.inst;
+  if (!s || !inst || !document.hasFocus && false) return;
+  const d = inst.snapshot(); if (d) H.saveLive(d);
+}, 30000);
+H.onCapture(() => { const inst = ui.stage && ui.stage.inst; H.sendCapture(inst ? inst.snapshot() : null); });
+// Keep her listening and looking state fresh between snapshots.
+setInterval(() => { if (ui.snap && ui.stage && ui.stage.inst) syncStage(ui.snap); }, 700);
+
 /* ---------------- rendering ---------------- */
 function render() {
   const s = ui.snap;
@@ -537,6 +676,8 @@ function render() {
   const bl = $('[data-part="brainline"]');
   if (bl) bl.textContent = 'Brain: ' + s.brain.model + ' (gen ' + s.brain.generation + ') on your Nvidia PC (RTX 5070) · Ollama · offline' + (s.brain.ok ? '' : ' · not reachable');
   avatarLife(s);
+  const v = document.getElementById('avatar-view'); if (v) v.className = 'view3d scene-' + (s.avatar.settings.scene || 'moon') + (s.avatar.settings.bodyType === 'drawn' ? ' drawn' : '');
+  syncStage(s);
   const ib = $('[data-act="installupdate"]');
   if (ib) ib.hidden = !(s.update && s.update.state === 'ready');
 }
@@ -546,7 +687,7 @@ function afterBuild(s) {
     $('#ai-name').value = s.name;
     $('#ai-personality').value = s.selfRules.personality;
   }
-  if (ui.screen === 'avatar') $('#let-suggest').checked = !!s.avatar.settings.letHerSuggest;
+  if (ui.screen === 'avatar') { $('#let-suggest').checked = !!s.avatar.settings.letHerSuggest; $('#smooth-motion').checked = s.avatar.settings.smooth !== false; }
   if (ui.screen === 'settings') {
     for (const el of document.querySelectorAll('[data-set]')) {
       const v = getPath(s.settings, el.getAttribute('data-set'));
@@ -600,15 +741,19 @@ async function speakText(text) {
   const an = ctx.createAnalyser(); an.fftSize = 512;
   src.connect(an); an.connect(ctx.destination);
   const buf = new Uint8Array(an.fftSize);
+  const freq = new Uint8Array(an.frequencyBinCount);
   const tick = () => {
     if (!ui.speaking) return;
     an.getByteTimeDomainData(buf);
+    an.getByteFrequencyData(freq);
     let peak = 0; for (const v of buf) peak = Math.max(peak, Math.abs(v - 128));
     const t = document.getElementById('talk-img');
     if (t) t.style.opacity = peak > 12 ? '1' : '0';
+    const inst = ui.stage && ui.stage.inst;
+    if (inst) inst.speak(Math.min(1, Math.max(0, (peak - 6) / 50)), AvatarStage.visemeFromSpectrum(freq));
     requestAnimationFrame(tick);
   };
-  audio.onended = () => { ui.speaking = false; const t = document.getElementById('talk-img'); if (t) t.style.opacity = '0'; ctx.close(); };
+  audio.onended = () => { ui.speaking = false; const t = document.getElementById('talk-img'); if (t) t.style.opacity = '0'; const inst = ui.stage && ui.stage.inst; if (inst) inst.speak(0); ctx.close(); };
   await audio.play();
   tick();
 }
@@ -683,8 +828,25 @@ document.addEventListener('click', async (e) => {
     case 'mic': toggleMic(); break;
     case 'speak': { const m = s.talk.chat.find((x) => x.id === id); if (m) speakText(m.text); break; }
     case 'redraw': { const r = await H.redrawAvatar(); if (!r.ok) toast('Couldn’t draw her: ' + r.reason); break; }
-    case 'savelook': { await saveCreator(); const r = await H.saveLook(); toast(r.ok ? 'Saved. Her new look is drawn.' : 'Saved her look. Drawing failed: ' + r.reason); break; }
+    case 'savelook': { if (s.avatar.settings.bodyType === 'drawn') { await saveCreator(); const r = await H.saveLook(); toast(r.ok ? 'Saved. Her new look is drawn.' : 'Saved her look. Drawing failed: ' + r.reason); } else { if (ui.stage && ui.stage.inst) { const d = ui.stage.inst.snapshot(); if (d) H.saveLive(d); } toast('Saved her look.'); } break; }
     case 'style': await H.setSettings({ avatar: { style: v } }); break;
+    case 'bodytype': {
+      if (v === 'drawn' || v === 'orb') await H.useModel(v);
+      else { const m = s.models.list.find((x) => x.kind === v); if (m) { const r = await H.useModel(m.id); if (r && !r.ok) toast(r.reason || 'Couldn’t use it.'); } else await H.setSettings({ avatar: { bodyType: v } }); }
+      ui.stageError = null; break;
+    }
+    case 'importany': case 'importvrm': case 'importl2d': {
+      const r = await H.importModel(act === 'importvrm' ? 'vrm' : act === 'importl2d' ? 'live2d' : 'any');
+      if (r.ok) toast('Added ' + r.model.name + '. License: ' + r.model.license + (r.warn ? ' · ' + r.warn : '')); else if (r.reason) toast(r.reason);
+      ui.coreAsked = false; ui.stageError = null; break;
+    }
+    case 'usemodel': { const r = await H.useModel(id); if (r && !r.ok && r.reason) toast(r.reason); ui.stageError = null; break; }
+    case 'rmmodel': await H.removeModel(id); break;
+    case 'getarch': H.openExternal('archchan'); toast('Arch-chan comes as a Blender file (CC0). Open it in Blender with the VRM add-on, export as VRM, then press “Add a .vrm file”.'); break;
+    case 'vroid': H.openExternal('vroid'); break;
+    case 'camera': await H.setSettings({ avatar: { camera: v } }); if (ui.stage && ui.stage.inst) ui.stage.inst.setCamera(v); break;
+    case 'resetview': if (ui.stage && ui.stage.inst) ui.stage.inst.resetView(); break;
+    case 'scene': await H.setSettings({ avatar: { scene: v } }); break;
     case 'framing': await H.setSettings({ avatar: { framing: v } }); toast('Press Redraw her to draw her ' + (v === 'full' ? 'full body.' : 'head and shoulders.')); break;
     case 'roster': await H.setSettings({ avatar: Object.assign({ roster: v }, s.roster[v]) }); rebuild(); break;
     case 'look-yes': await H.answerLook(true); toast('Trying her idea. Redrawing…'); break;
@@ -731,6 +893,7 @@ document.addEventListener('change', async (e) => {
   if (t.matches('[data-sense]')) { await H.setSettings({ senses: { [t.getAttribute('data-sense')]: t.checked } }); }
   else if (t.matches('[data-place]')) { await H.setSettings({ avatar: { places: { [t.getAttribute('data-place')]: t.checked } } }); }
   else if (t.matches('[data-avfield]')) { await saveCreator(); }
+  else if (t.matches('[data-mood]')) { await H.setSettings({ avatar: { faces: { [t.getAttribute('data-mood')]: t.value } } }); }
   else if (t.matches('[data-set]')) {
     const key = t.getAttribute('data-set');
     let v = t.type === 'checkbox' ? t.checked : t.type === 'number' ? Number(t.value) : t.value;
@@ -747,6 +910,7 @@ document.addEventListener('submit', (e) => {
   }
 });
 document.addEventListener('keydown', (e) => {
+  if (e.target.id === 'talk-input') ui.typingAt = Date.now();
   if (e.target.id === 'talk-input' && e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); e.target.form.requestSubmit(); }
 });
 let searchTimer = null;

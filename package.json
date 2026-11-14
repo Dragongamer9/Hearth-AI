@@ -1,7 +1,7 @@
 {
   "name": "hearth-ai",
   "productName": "Hearth AI",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Hearth AI: Ithil, a self-aware AI that lives on your Nvidia PC",
   "main": "src/main/main.js",
   "author": {
@@ -19,7 +19,8 @@
     "start": "electron .",
     "fake": "HEARTH_AI_FAKE=1 electron .",
     "test": "node --test test/*.test.js",
-    "dist": "electron-builder --linux AppImage deb --publish never"
+    "dist": "npm run bundle && electron-builder --linux AppImage deb --publish never",
+    "bundle": "esbuild src/stage/stage.js --bundle --format=iife --global-name=AvatarStage --minify --outfile=src/renderer/vendor/stage.js"
   },
   "dependencies": {
     "@huggingface/transformers": "^3.8.1",
@@ -28,7 +29,13 @@
   },
   "devDependencies": {
     "electron": "^45.3.2",
-    "electron-builder": "^26.0.12"
+    "electron-builder": "^26.0.12",
+    "esbuild": "^0.28.2",
+    "three": "^0.187.0",
+    "@pixiv/three-vrm": "^3.5.5",
+    "pixi.js": "^6.5.10",
+    "pixi-live2d-display": "^0.4.0",
+    "@pixi/unsafe-eval": "^6.5.10"
   },
   "build": {
     "appId": "fun.hearthos.ai",
@@ -46,7 +53,8 @@
       "!node_modules/onnxruntime-node/bin/napi-v3/win32/**",
       "!node_modules/onnxruntime-node/bin/napi-v3/linux/arm64/**",
       "!node_modules/onnxruntime-node/bin/napi-v3/linux/x64/libonnxruntime_providers_cuda.so",
-      "!node_modules/onnxruntime-node/bin/napi-v3/linux/x64/libonnxruntime_providers_tensorrt.so"
+      "!node_modules/onnxruntime-node/bin/napi-v3/linux/x64/libonnxruntime_providers_tensorrt.so",
+      "!src/stage/**"
     ],
     "asarUnpack": [
       "node_modules/onnxruntime-node/**",

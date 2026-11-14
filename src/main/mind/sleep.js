@@ -178,7 +178,7 @@ async function sleep(mind) {
     const st = mind.settings.get();
     if (st.avatar.letHerSuggest && Math.random() < 0.34) {
       try {
-        const look = await mind.brain.json('TASK:LOOK\n' + P.identity(s), 'Your avatar right now: ' + JSON.stringify(st.avatar) + '. Is there anything you would like to change about how you look? Only if you really want to. JSON {"suggest": null or {"text": what you would say to him (first person, 1-2 sentences), "changes": {"hair"?: string, "eyes"?: string, "outfit"?: string, "nightOutfit"?: string}}}.');
+        const look = await mind.brain.json('TASK:LOOK\n' + P.identity(s), 'Your avatar right now: ' + JSON.stringify(st.avatar) + '. ' + (mind.state.bodySeen ? 'Last time you looked at your body you saw: ' + mind.state.bodySeen.saw.slice(0, 300) + '. ' : '') + 'Is there anything you would like to change about how you look or how your body is shown? Only if you really want to. JSON {"suggest": null or {"text": what you would say to him (first person, 1-2 sentences), "changes": {"hair"?: string, "eyes"?: string, "outfit"?: string, "nightOutfit"?: string, "buddyPose"?: "sit"|"stand", "scene"?: "moon"|"hearth"|"clear", "camera"?: "full"|"upper"|"face"}}}.');
         if (look && look.suggest && look.suggest.text) s.lookSuggestion = Object.assign({ at: mind.now() }, look.suggest);
       } catch (_) {}
     }

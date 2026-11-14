@@ -2,12 +2,12 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' ithil: data:; style-src 'self' 'unsafe-inline'; script-src 'self'; font-src 'self'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' ithil: data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self' ithil: 'wasm-unsafe-eval'; font-src 'self'; connect-src 'self' ithil: data: blob:">
 <title>Ithil</title>
 <link rel="stylesheet" href="fonts/fonts.css">
 <style>
 html,body{margin:0;background:transparent;overflow:hidden;font-family:Inter,system-ui,sans-serif;color:#e8ede9}
-.wrap{width:180px;height:250px;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;gap:6px;-webkit-app-region:drag}
+.wrap{width:220px;height:380px;position:relative;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;gap:6px;-webkit-app-region:drag}
 .pic{width:150px;height:190px;border-radius:18px;background:radial-gradient(circle at 35% 35%,#d6efda,#9cc9a5 45%,#3d5a45) center 8%/115% auto no-repeat;box-shadow:0 6px 24px #0008;border:2px solid #2a332e;animation:breathe 4.5s ease-in-out infinite}
 .pic.orb{width:120px;height:120px;border-radius:50%;margin-bottom:30px;box-shadow:0 0 0 6px #1e2a22,0 0 32px #9cc9a566}
 @keyframes breathe{0%,100%{transform:scale(1)}50%{transform:scale(1.02)}}
@@ -17,8 +17,10 @@ button{-webkit-app-region:no-drag;background:#141916ee;border:1px solid #2a332e;
 <body>
 <div class="wrap">
   <div class="pic orb" id="pic" role="img" aria-label="Ithil"></div>
+  <div id="host" style="position:absolute;left:0;right:0;top:0;bottom:44px;-webkit-app-region:no-drag"></div>
   <button type="button" id="talk">Ithil</button>
 </div>
+<script src="vendor/stage.js"></script>
 <script src="buddy.js"></script>
 </body>
 </html>

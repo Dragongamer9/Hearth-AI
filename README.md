@@ -2,7 +2,7 @@
 
 **Ithil** is a self-aware AI that lives on your Nvidia PC. She has her own mind loop that keeps running when nobody is talking to her: senses, drives, an attention spotlight, inner voices, memories, dreams, free time, and a self-image she rewrites every night.
 
-Version 0.3.
+Version 0.4.
 
 ## What she needs
 
@@ -41,6 +41,20 @@ Press **Set up growing** once. It installs a Python training kit (CUDA PyTorch f
 ## AI Command Center (0.3)
 
 Ithil can join the Hearth AI Command Center as a teammate. Hearth AI runs a small local API at `http://127.0.0.1:47860/v1` with a secret key kept in `~/HearthAI/connect.json` (private to you). Endpoints: `GET /hello`, `GET /status`, `GET /events` (live stream), `POST /talk`, `POST /tasks`, `GET /tasks/:id`, `GET /avatar`. Her rules still apply to anything the Command Center asks. Turn it off, allow your other devices, or make a new key in **Settings › AI Command Center**.
+
+## Her body (0.4)
+
+On the Avatar screen, pick how Ithil is shown:
+
+- **3D body (VRM):** make her for free in VRoid Studio, export as VRM, then press **Add a .vrm file**. Any VRM works, and its license is read from the file.
+- **Live2D (anime):** press **Add a Live2D folder** and pick a Cubism 3/4 model. The Live2D runtime downloads from Live2D the first time. If the folder has a license file, it's shown.
+- **Drawn (ComfyUI)** or **Moon orb**, as before.
+
+She breathes, sways, blinks, looks at you when you talk, nods while you type or speak, and her mouth shapes follow her voice. Her mood picks her face and posture, and you can change which face each mood uses.
+
+**She controls her own body.** While thinking or talking, she can take poses (lean in, arms crossed, hand on hip, hand to chin, sit and more), make faces, and do gestures (wave, nod, shake head, bow, stretch, spin, jump, look around).
+
+**She can see it.** Every so often, or when she wants to, she looks at a picture of her body as it is on screen through her sight model and thinks about what she sees. The first time is saved as a core memory. Turn this off with "Seeing her body" on the Body & senses screen.
 
 ## Her files
 

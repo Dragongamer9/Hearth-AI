@@ -18,15 +18,18 @@ const { restore, listBackups } = require('./mind/sleep');
 const { Comfy, ROSTER } = require('./comfy');
 const { Voice, VOICES } = require('./voice');
 const { Link } = require('./link');
+const { Models, ARCH_CHAN_URL } = require('./models');
 
-const VERSION = '0.3';
+const VERSION = '0.4';
 const RENDERER = path.join(__dirname, '..', 'renderer');
 
 if (!app.requestSingleInstanceLock()) { app.quit(); process.exit(0); }
-protocol.registerSchemesAsPrivileged([{ scheme: 'ithil', privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true } }]);
+protocol.registerSchemesAsPrivileged([{ scheme: 'ithil', privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true, corsEnabled: true } }]);
 
 let win = null, buddy = null, tray = null, quitting = false;
-let store, settings, rules, brain, body, comfy, mind, voice, link;
+let store, settings, rules, brain, body, comfy, mind, voice, link, models;
+let bodyExpressions = [];
+let captureWaiters = [];
 const status = { brainOk: true, comfyOk: true, drawing: false, listening: false, drawProgress: null, update: null };
 
 function getSettings() { return settings.get(); }
@@ -43,6 +46,14 @@ function setupMind() {
     store, brain, settings, rules, body, comfy,
     hooks: {
       idleSeconds: () => (settings.get().senses.presence ? powerMonitor.getSystemIdleTime() : 9999),
+      bodyInfo: () => {
+        const av = settings.get().avatar;
+        const m = models && av.modelId ? models.get(av.modelId) : null;
+        const movable = (av.bodyType === 'vrm' || av.bodyType === 'live2d') && !!m && m.kind === av.bodyType;
+        const shown = (buddy && !buddy.isDestroyed() && buddy.isVisible()) || (win && !win.isDestroyed() && win.isVisible());
+        return { kind: av.bodyType, name: m ? m.name : '', movable, visible: movable && !!shown, expressions: bodyExpressions };
+      },
+      seeBody: () => captureBody(),
       sight: async () => {
         if (!win) return null;
         const img = await win.webContents.capturePage();
@@ -55,7 +66,8 @@ function setupMind() {
     }
   });
   mind.on('error', (e) => console.error('[mind]', e && e.stack || e));
-  link = new Link(mind, { version: VERSION });
+  models = new Models(store, () => mind.state.name);
+  link = new Link(mind, { version: VERSION, models });
   link.start();
   let pending = null;
   const pushUpdate = () => {
@@ -86,8 +98,37 @@ async function checkServices() {
 
 function view() {
   return Object.assign(snapshot(mind, { version: VERSION, brainOk: status.brainOk, comfyOk: status.comfyOk, drawing: status.drawing, listening: status.listening, link: link ? link.view() : null }), {
-    drawProgress: status.drawProgress, update: status.update, link: link ? link.view() : null, pulling: status.pulling, modelsMissing: status.modelsMissing, ttsVoices: VOICES, roster: ROSTER
+    drawProgress: status.drawProgress, update: status.update, link: link ? link.view() : null, models: modelsView(), pulling: status.pulling, modelsMissing: status.modelsMissing, ttsVoices: VOICES, roster: ROSTER
   });
+}
+
+// Ask whichever window is showing her body for a fresh picture of it.
+function captureBody() {
+  const targets = [buddy, win].filter((w) => w && !w.isDestroyed() && w.isVisible());
+  if (!targets.length) return Promise.resolve(null);
+  return new Promise((resolve) => {
+    const t = setTimeout(() => { captureWaiters = captureWaiters.filter((x) => x !== done); resolve(null); }, 4000);
+    const done = (dataUrl) => { clearTimeout(t); resolve(dataUrl && dataUrl.split(',')[1] ? dataUrl.split(',')[1] : null); };
+    captureWaiters.push(done);
+    targets[0].webContents.send('avatar:capture');
+  });
+}
+
+function modelsView() {
+  if (!models) return null;
+  const st = settings.get().avatar;
+  const url = (m, f) => 'ithil://file/models/' + encodeURIComponent(m.id) + '/' + f.split('/').map(encodeURIComponent).join('/');
+  const list = models.list.map((m) => ({ id: m.id, kind: m.kind, name: m.name, kindLabel: m.kindLabel, license: m.license, licenseText: m.licenseText || '', url: url(m, m.file), thumb: m.thumb ? url(m, m.thumb) + '?v=' + (m.at || 0) : null, using: (st.bodyType === m.kind) && st.modelId === m.id }));
+  const hasArch = models.list.some((m) => m.source === 'arch-chan');
+  const drawn = fs.existsSync(store.p('avatar', 'calm.png'));
+  const current = models.get(st.modelId);
+  return {
+    list,
+    archChan: hasArch ? null : { name: 'Arch-chan 3D', kindLabel: '3D \u00b7 converted from Blender', license: 'CC0 \u00b7 free for anything' },
+    drawn: { name: 'Drawn ' + mind.state.name, kindLabel: 'Pictures from ComfyUI', license: 'Yours', ready: drawn, using: st.bodyType === 'drawn', thumb: drawn ? 'ithil://file/avatar/calm.png?v=' + Math.round(fs.statSync(store.p('avatar', 'calm.png')).mtimeMs) : null },
+    current: current && current.kind === st.bodyType ? { id: current.id, kind: current.kind, name: current.name, url: url(current, current.file) } : null,
+    coreUrl: fs.existsSync(models.coreFile()) ? 'ithil://file/vendor/live2dcubismcore.min.js' : null
+  };
 }
 
 function iconPath() { return path.join(__dirname, '..', '..', 'build', 'icon.png'); }
@@ -109,7 +150,7 @@ function createBuddy() {
   const { screen } = require('electron');
   const area = screen.getPrimaryDisplay().workArea;
   buddy = new BrowserWindow({
-    width: 180, height: 250, x: area.x + area.width - 200, y: area.y + area.height - 270,
+    width: 220, height: 380, x: area.x + area.width - 240, y: area.y + area.height - 400,
     frame: false, transparent: true, resizable: false, alwaysOnTop: true, skipTaskbar: true, hasShadow: false, focusable: true,
     webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false, sandbox: false }
   });
@@ -194,7 +235,13 @@ function setupIpc() {
   ipcMain.handle('wish:answer', (_e, id, answer) => mind.answerWish(id, answer));
   ipcMain.handle('look:answer', async (_e, accept) => {
     const sug = mind.answerLook(accept);
-    if (sug && sug.changes) { settings.setByUser({ avatar: sug.changes }); redrawAvatar(); }
+    if (sug && sug.changes) {
+      const ok = {};
+      for (const k of ['hair', 'eyes', 'outfit', 'nightOutfit', 'buddyPose', 'scene', 'camera']) if (sug.changes[k]) ok[k] = String(sug.changes[k]).slice(0, 80);
+      settings.setByUser({ avatar: ok });
+      if (settings.get().avatar.bodyType === 'drawn' && (ok.hair || ok.eyes || ok.outfit || ok.nightOutfit)) redrawAvatar();
+      mind.emit('update');
+    }
     return true;
   });
   ipcMain.handle('settings:set', (_e, patch) => {
@@ -282,6 +329,58 @@ function setupIpc() {
   });
   ipcMain.handle('link:newkey', () => { link.newKey(); mind.emit('update'); return true; });
   ipcMain.handle('link:open', () => shell.showItemInFolder(link.file));
+  ipcMain.handle('models:import', async (_e, kind) => {
+    const opts = kind === 'live2d'
+      ? { title: 'Pick a Live2D model folder (with a .model3.json)', properties: ['openDirectory'] }
+      : kind === 'vrm' ? { title: 'Pick a VRM file', properties: ['openFile'], filters: [{ name: 'VRM model', extensions: ['vrm'] }] }
+      : { title: 'Pick a VRM file or a Live2D .model3.json', properties: ['openFile'], filters: [{ name: 'VRM or Live2D', extensions: ['vrm', 'json'] }] };
+    const r = await dialog.showOpenDialog(win, opts);
+    if (r.canceled || !r.filePaths[0]) return { ok: false };
+    try {
+      const p = r.filePaths[0];
+      const m = /\.vrm$/i.test(p) ? models.importVrm(p) : models.importLive2d(p);
+      if (m.kind === 'live2d') { try { await models.ensureCubismCore(); } catch (e) { return { ok: true, model: m, warn: e.message }; } }
+      settings.setByUser({ avatar: { bodyType: m.kind, modelId: m.id } });
+      mind.moment('He gave me a new body: ' + m.name + '.', 'self');
+      mind.emit('update');
+      return { ok: true, model: m };
+    } catch (e) { return { ok: false, reason: String(e.message || e) }; }
+  });
+  ipcMain.handle('models:use', async (_e, id) => {
+    if (id === 'drawn' || id === 'orb') settings.setByUser({ avatar: { bodyType: id } });
+    else {
+      const m = models.get(id);
+      if (!m) return { ok: false };
+      if (m.kind === 'live2d') { try { await models.ensureCubismCore(); } catch (e) { return { ok: false, reason: e.message }; } }
+      settings.setByUser({ avatar: { bodyType: m.kind, modelId: m.id } });
+    }
+    mind.emit('update');
+    return { ok: true };
+  });
+  ipcMain.handle('models:remove', async (_e, id) => {
+    const m = models.get(id);
+    if (!m) return false;
+    const r = await dialog.showMessageBox(win, { type: 'question', buttons: ['Remove', 'Keep'], defaultId: 1, cancelId: 1, message: 'Remove ' + m.name + ' from Hearth AI?', detail: 'This removes Hearth AI\u2019s copy. Your original file stays where it is.' });
+    if (r.response !== 0) return false;
+    models.remove(id);
+    if (settings.get().avatar.modelId === id) settings.setByUser({ avatar: { modelId: null } });
+    mind.emit('update');
+    return true;
+  });
+  ipcMain.handle('avatar:captured', (_e, dataUrl) => { const w = captureWaiters.shift(); if (w) w(dataUrl); return true; });
+  ipcMain.handle('avatar:expressions', (_e, list) => { if (Array.isArray(list)) bodyExpressions = list.slice(0, 60).map(String); return true; });
+  ipcMain.handle('models:thumb', (_e, id, dataUrl) => models.saveThumb(id, dataUrl));
+  ipcMain.handle('live2d:core', async () => { try { await models.ensureCubismCore(); return { ok: true }; } catch (e) { return { ok: false, reason: String(e.message || e) }; } });
+  ipcMain.handle('avatar:live', (_e, dataUrl) => {
+    if (!/^data:image\/png;base64,/.test(dataUrl || '')) return false;
+    fs.mkdirSync(store.p('avatar'), { recursive: true });
+    fs.writeFileSync(store.p('avatar', 'live.png'), Buffer.from(dataUrl.split(',')[1], 'base64'));
+    return true;
+  });
+  ipcMain.handle('open:external', (_e, which) => {
+    const urls = { archchan: ARCH_CHAN_URL, vroid: 'https://vroid.com/en/studio' };
+    if (urls[which]) shell.openExternal(urls[which]);
+  });
   ipcMain.handle('growth:setup', () => mind.growth.setup());
   ipcMain.handle('growth:grow', async () => {
     const r = await dialog.showMessageBox(win, { type: 'question', buttons: ['Grow now', 'Cancel'], defaultId: 0, cancelId: 1, message: 'Grow ' + mind.state.name + '\u2019s brain now?', detail: 'Training uses the GPU for 20 to 60 minutes. Her mind rests while it runs. It stops on its own if you start a game.' });
@@ -304,7 +403,11 @@ app.whenReady().then(() => {
     const rel = decodeURIComponent(u.pathname.replace(/^\/+/, ''));
     const abs = path.resolve(store.dir, rel);
     if (!abs.startsWith(path.resolve(store.dir) + path.sep)) return new Response('no', { status: 403 });
-    return net.fetch(pathToFileURL(abs).toString());
+    return net.fetch(pathToFileURL(abs).toString()).then((r) => {
+      const h = new Headers(r.headers);
+      h.set('Access-Control-Allow-Origin', '*');
+      return new Response(r.body, { status: r.status, headers: h });
+    });
   });
   setupMind();
   setupIpc();
@@ -330,7 +433,8 @@ async function takeShots(dir) {
   const screens = ['mind', 'talk', 'avatar', 'attention', 'voices', 'body', 'dreams', 'free', 'memories', 'selfcheck', 'self', 'settings'];
   for (const sc of screens) {
     win.webContents.send('navigate', sc);
-    await wait(1500);
+    await wait(sc === 'avatar' || sc === 'talk' ? 9000 : 1500);
+    try { const dbg = await win.webContents.executeJavaScript("JSON.stringify({ st: !!(ui.stage && ui.stage.inst), key: ui.stage && ui.stage.key, err: ui.stageError, loading: ui.stageLoading, canvas: (()=>{ const c = document.querySelector('#avatar-host canvas, #talk-host canvas, #mind-face-host canvas'); return c ? [c.width, c.height, c.parentElement.id] : null; })() })"); fs.appendFileSync(path.join(dir, 'console.log'), sc + ' ' + dbg + '\n'); } catch (_) {}
     const h = await win.webContents.executeJavaScript('Math.max(document.body.scrollHeight, 960)');
     win.setContentSize(1440, Math.min(h, 2600));
     await wait(600);

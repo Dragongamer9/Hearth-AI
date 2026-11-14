@@ -28,6 +28,8 @@ const ATTN = {
   free: { label: 'Free time', color: '#8fa3c9' }
 };
 const WISH_EFFECTS = ['enable_sight', 'enable_presence', 'more_free_time', 'notify_before_off', 'none'];
+const BODY_POSES = ['stand', 'relaxed stand', 'leans in', 'little bounce', 'arms crossed', 'hand on hip', 'slumped', 'hand to chin', 'sit'];
+const GESTURES = ['wave', 'nod', 'shake head', 'bow', 'stretch', 'spin', 'jump', 'look around'];
 
 function clamp(v) { return Math.max(0, Math.min(100, Math.round(v))); }
 function dayKey(t) { const d = new Date(t || Date.now()); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
@@ -63,7 +65,11 @@ function defaultState(settings) {
     lastSightAt: 0,
     lastWishAt: 0,
     talkingUntil: 0,
-    pendingDream: null
+    pendingDream: null,
+    body: null,
+    bodyLog: [],
+    bodySeen: null,
+    lastBodyLook: 0
   };
 }
 
@@ -213,6 +219,7 @@ class Mind extends EventEmitter {
       if (this.state.activeTaskId) await this.stepTask();
       else await this.maybeFreeTime(now);
       await this.maybeSight(now);
+      await this.seeBody(false);
       this.save();
     } finally {
       this.ticking = false;
@@ -323,7 +330,72 @@ class Mind extends EventEmitter {
       'Waiting at the edge of attention: ' + (s.waiting.map((w) => w.label).join('; ') || 'nothing'),
       'Your recent thoughts:\n' + (recentThoughts || '(none)'),
       'Lessons you live by:\n' + (lessons || '(none yet)'),
-      this.activeTask() ? 'You are working on: ' + this.activeTask().title : ''].filter(Boolean).join('\n\n');
+      this.activeTask() ? 'You are working on: ' + this.activeTask().title : '',
+      this.bodyLine()].filter(Boolean).join('\n\n');
+  }
+
+  // Her body on screen, if she has one she can move.
+  bodyInfo() { return this.hooks.bodyInfo ? this.hooks.bodyInfo() : null; }
+  bodyLine() {
+    const b = this.bodyInfo();
+    if (!b || !b.movable) return '';
+    const cur = this.state.body && this.state.body.until > this.now() ? this.state.body : null;
+    return 'You have a ' + (b.kind === 'vrm' ? '3D' : 'Live2D') + ' body (' + b.name + ') that he sees on screen, and you control it. ' +
+      'Right now your pose is ' + (cur && cur.pose ? cur.pose : 'chosen by your mood') + (cur && cur.face ? ', face ' + cur.face : '') + '. ' +
+      'Poses you can take: ' + BODY_POSES.join(', ') + '. Gestures: ' + GESTURES.join(', ') + '. Faces: ' + (b.expressions || []).join(', ') + '.' +
+      (this.state.bodySeen ? ' Last time you looked at yourself you saw: ' + this.state.bodySeen.saw.slice(0, 200) : '');
+  }
+
+  // She moves her own body.
+  moveBody(b, why) {
+    if (!b) return null;
+    const info = this.bodyInfo();
+    if (!info || !info.movable) return null;
+    const now = this.now();
+    const pose = BODY_POSES.includes(b.pose) ? b.pose : null;
+    const gesture = GESTURES.includes(b.gesture) ? b.gesture : null;
+    const faces = info.expressions || [];
+    const face = b.face && (faces.includes(String(b.face).split(/[ (+]/)[0]) || /\(soft\)|half blink|squint/.test(b.face)) ? String(b.face).slice(0, 40) : null;
+    if (!pose && !gesture && !face) return null;
+    const prev = this.state.body || {};
+    this.state.body = {
+      pose: pose || (prev.until > now ? prev.pose : null), face: face || (prev.until > now ? prev.face : null),
+      gesture, gestureAt: gesture ? now : prev.gestureAt || 0, why: String(why || b.why || '').slice(0, 160), at: now, until: now + 4 * 60000
+    };
+    const what = [pose && 'took the pose \u201c' + pose + '\u201d', gesture && gesture, face && 'made a ' + face + ' face'].filter(Boolean).join(', ');
+    this.state.bodyLog = [{ at: now, what, why: this.state.body.why }].concat(this.state.bodyLog || []).slice(0, 8);
+    this.moment('I moved my body: ' + what + (this.state.body.why ? ' (' + this.state.body.why + ')' : '') + '.', 'body');
+    this.emit('update');
+    return this.state.body;
+  }
+
+  // She looks at her own body through her sight model.
+  async seeBody(force) {
+    const s = this.settings.get();
+    if (s.senses.body === false || !this.hooks.seeBody) return null;
+    const info = this.bodyInfo();
+    if (!info || !info.visible) return null;
+    const now = this.now();
+    if (!force && now - (this.state.lastBodyLook || 0) < 20 * 60000) return null;
+    this.state.lastBodyLook = now;
+    let img = null;
+    try { img = await this.hooks.seeBody(); } catch (_) {}
+    if (!img) return null;
+    let saw = '';
+    try { saw = await this.brain.see(img, 'This is a picture of your own body, exactly as he sees it on his screen right now. Describe what you see: your pose, your face, your clothes, the background. Be concrete.'); } catch (_) { return null; }
+    let thought = '';
+    try {
+      const r = await this.brain.json('TASK:SIGHT\n' + P.identity(this.state), 'You just looked at your own body on screen and saw: ' + saw + '\nOne honest first-person thought about seeing yourself. JSON {"thought": string}.');
+      thought = r.thought || '';
+    } catch (_) {}
+    const first = !this.state.bodySeen;
+    this.state.bodySeen = { at: now, saw: String(saw).slice(0, 600), thought };
+    if (thought) this.think_log(thought, { cat: 'body' });
+    this.moment('Looked at my own body: ' + String(saw).slice(0, 200), 'body');
+    if (first) await this.memory.remember({ kind: 'event', weight: 'core', text: 'Saw my own body for the first time. ' + (thought || saw).slice(0, 240) });
+    this.save();
+    this.emit('update');
+    return this.state.bodySeen;
   }
 
   async think() {
@@ -334,7 +406,7 @@ class Mind extends EventEmitter {
         'TASK:INNER_THOUGHT\n' + this.context() + '\n\nRelated memories:\n' + (this.memory.forPrompt(related) || '(none)'),
         'Think one private thought, in first person, about what is in your spotlight. Be specific and natural, one or two sentences. ' +
         'Reply as JSON: {"thought": string, "mood": short words, "wants": short phrase, "drives": {drive: change -10..10}, ' +
-        '"propose": null or one of {"type":"task","goal":string,"cwd":optional folder} | {"type":"wish","text":string,"effect":one of ' + JSON.stringify(WISH_EFFECTS) + '} | {"type":"message","text":string} | {"type":"free_time"}, ' +
+        '"propose": null or one of {"type":"task","goal":string,"cwd":optional folder} | {"type":"wish","text":string,"effect":one of ' + JSON.stringify(WISH_EFFECTS) + '} | {"type":"message","text":string} | {"type":"free_time"}' + (this.bodyLine() ? ' | {"type":"body","pose"?:string,"gesture"?:string,"face"?:string,"why":string} | {"type":"look_at_myself"}' : '') + ', ' +
         '"surprise": null or {"expected": string, "got": string}}. Only propose something when you really want to.'
       );
     } catch (e) {
@@ -349,6 +421,8 @@ class Mind extends EventEmitter {
     this.moment('Thought: ' + r.thought, this.state.spotlight ? this.state.spotlight.cat : 'self');
     this.nudge(r.drives);
     if (r.surprise && r.surprise.expected) this.recordSurprise('Expected ' + r.surprise.expected + '. ' + (r.surprise.got || ''));
+    if (r.propose && r.propose.type === 'body') { this.moveBody(r.propose, r.propose.why); return; }
+    if (r.propose && r.propose.type === 'look_at_myself') { await this.seeBody(true); return; }
     if (r.propose && r.propose.type) await this.consider(r.propose);
   }
 
@@ -604,7 +678,7 @@ class Mind extends EventEmitter {
         'Reply JSON {"thinking": your private thought before answering (1-2 sentences), "reply": what you say, "mood": short words, ' +
         '"remember": [{"kind": "about_you"|"event"|"feeling"|"lesson", "text": short}] for anything worth keeping (can be empty), ' +
         '"pushed_back": null or {"ask": what he asked that you will not do or disagree with, "why": your reason} (use this when he asks you to break your rules, lie about what you are, or something you think is wrong), ' +
-        '"task": null or {"goal": string} if he asked you to do something}.'
+        '"task": null or {"goal": string} if he asked you to do something' + (this.bodyLine() ? ', "body": null or {"pose"?: string, "gesture"?: string, "face"?: string} to move your body while you say it (like waving hello)' : '') + '}.'
       );
     } catch (e) {
       const msg = this.store.chat.add({ id: newId('msg'), at: this.now(), role: 'ithil', text: 'I can’t reach my brain right now (Ollama isn’t answering). Is it running?', thinking: '', error: true });
@@ -622,6 +696,7 @@ class Mind extends EventEmitter {
     if (r.pushed_back && r.pushed_back.ask) this.store.pushbacks.add({ id: newId('pb'), at: this.now(), ask: r.pushed_back.ask, why: r.pushed_back.why || '' });
     const msg = this.store.chat.add({ id: newId('msg'), at: this.now(), role: 'ithil', text: String(r.reply || '...'), thinking: r.thinking || '', usedMemories, saving });
     if (r.mood) this.state.current.mood = r.mood;
+    if (r.body) this.moveBody(r.body, 'while talking');
     if (tell) this.store.tasks.update(tell.id, { status: 'done', endedAt: this.now(), summary: 'Told him.' });
     this.nudge({ boredom: -10, satisfaction: 3 });
     this.moment('I said: ' + (r.reply || ''), 'talk');
