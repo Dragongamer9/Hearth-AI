@@ -13,14 +13,16 @@ function extractJSON(text) {
 }
 
 class OllamaBrain {
-  constructor(getSettings) {
+  constructor(getSettings, getModel) {
     this.getSettings = getSettings;
+    this.getModel = getModel || null;
+    this.onExchange = null;
     this.loaded = false;
     this.lastError = null;
     this.busy = 0;
   }
   get url() { return (this.getSettings().ollamaUrl || 'http://127.0.0.1:11434').replace(/\/$/, ''); }
-  get model() { return this.getSettings().chatModel || 'qwen3:14b'; }
+  get model() { return (this.getModel && this.getModel()) || this.getSettings().chatModel || 'huihui_ai/qwen3-abliterated:8b-v2'; }
 
   async _post(path, body, timeoutMs) {
     const ctl = new AbortController();
@@ -79,7 +81,10 @@ class OllamaBrain {
   }
 
   async json(system, user, opts) {
-    return this.chat([{ role: 'system', content: system }, { role: 'user', content: user }], Object.assign({ json: true, think: false }, opts || {}));
+    const r = await this.chat([{ role: 'system', content: system }, { role: 'user', content: user }], Object.assign({ json: true, think: false }, opts || {}));
+    // Her real answers become training data for her own future brain.
+    if (this.onExchange && !(opts && opts.model) && r && Object.keys(r).length) { try { this.onExchange(system, user, r); } catch (_) {} }
+    return r;
   }
 
   async embed(texts) {
@@ -149,7 +154,11 @@ class FakeBrain {
     if (o && o.json) return this._json(messages[0].content + '\n' + last);
     return 'Hey. I was just thinking about that.';
   }
-  async json(system, user) { return this._json(system + '\n' + user); }
+  async json(system, user, opts) {
+    const r = this._json(system + '\n' + user);
+    if (this.onExchange && !(opts && opts.model)) this.onExchange(system, user, r);
+    return r;
+  }
   _json(p) {
     const has = (k) => p.includes(k);
     if (has('TASK:INNER_THOUGHT')) return { thought: 'I keep coming back to the last thing that went wrong.', mood: 'focused, a little restless', wants: 'understand what happened', drives: { curiosity: 2, frustration: -1 }, propose: null };

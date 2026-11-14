@@ -18,6 +18,9 @@ const DEFAULTS = {
   unloadWhenGaming: true,
   gpuBusyPercent: 85,
   notifyBeforeSwitchOff: false,
+  growWhileSleeping: true,
+  growEveryDays: 3,
+  hfToken: '',
   senses: { hardware: true, time: true, hearing: true, sight: false, presence: false },
   avatar: {
     style: 'Anime',

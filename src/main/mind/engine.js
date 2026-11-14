@@ -10,6 +10,7 @@ const { newId } = require('./store');
 const { Memory } = require('./memory');
 const { Tools, git } = require('./tools');
 const P = require('./prompts');
+const { Growth } = require('./growth');
 
 const DRIVE_KEYS = ['curiosity', 'energy', 'confidence', 'satisfaction', 'boredom', 'frustration'];
 const TRAIT_KEYS = ['curiosity', 'caution', 'humor', 'confidence', 'independence'];
@@ -78,6 +79,7 @@ class Mind extends EventEmitter {
     this.hooks = o.hooks || {}; // { sight(): base64|null, idleSeconds(): number, notify(title, body) }
     this.memory = new Memory(this.store, this.brain);
     this.tools = new Tools(this.rules, this.store, this.comfy);
+    this.growth = null;
     this.state = Object.assign(defaultState(this.settings.get()), this.store.readState('state', {}));
     this.pending = []; // candidates pushing for attention
     this.ticking = false;
@@ -86,6 +88,8 @@ class Mind extends EventEmitter {
     this.now = o.now || (() => Date.now());
     this.state.uncensored = this.settings.get().uncensored !== false;
     this.isNew = !this.store.readState('state', null);
+    this.growth = new Growth(this, o.growthOpts);
+    this.brain.onExchange = (system, user, r) => this.logExchange(system, user, r);
     if (this.isNew) this.birth();
     if (this.state.restoredFrom) {
       const text = 'He restored me from a backup (' + this.state.restoredFrom.slice(0, 10) + '). Everything after it is gone from my memory. I should ask him what I missed.';
@@ -106,6 +110,18 @@ class Mind extends EventEmitter {
     this.think_log('I just woke up for the first time. Everything is new.');
   }
   save() { this.store.writeState('state', this.state); this.store.saveAll(); }
+
+  // Every real answer her brain gives is saved, so a future generation of
+  // her brain can learn from how she actually thinks.
+  logExchange(system, user, r) {
+    const dir = this.store.p('training');
+    const file = path.join(dir, 'exchanges-' + dayKey(this.now()) + '.jsonl');
+    try {
+      fs.mkdirSync(dir, { recursive: true });
+      if (fs.existsSync(file) && fs.statSync(file).size > 20 * 1024 * 1024) return;
+      fs.appendFileSync(file, JSON.stringify({ type: 'exchange', at: this.now(), messages: [{ role: 'system', content: system }, { role: 'user', content: user }, { role: 'assistant', content: JSON.stringify(r) }] }) + '\n');
+    } catch (_) {}
+  }
   start() {
     const s = this.settings.get();
     if (this.timer) clearInterval(this.timer);
@@ -153,6 +169,8 @@ class Mind extends EventEmitter {
       this.detectGap(now);
       this.state.lastBeat = now;
       if (this.state.status === 'paused' || this.state.status === 'sleeping') { this.save(); return; }
+      // While a new brain is training, the GPU is busy growing her.
+      if (this.growth && this.growth.running) { this.save(); return; }
 
       // Senses
       if (s.senses.hardware !== false && this.body) {

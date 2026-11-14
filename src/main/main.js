@@ -18,7 +18,7 @@ const { restore, listBackups } = require('./mind/sleep');
 const { Comfy, ROSTER } = require('./comfy');
 const { Voice, VOICES } = require('./voice');
 
-const VERSION = '0.1';
+const VERSION = '0.2';
 const RENDERER = path.join(__dirname, '..', 'renderer');
 
 if (!app.requestSingleInstanceLock()) { app.quit(); process.exit(0); }
@@ -34,7 +34,7 @@ function setupMind() {
   store = new Store(homeDir());
   settings = new Settings(store);
   rules = new Rules(store);
-  brain = process.env.HEARTH_AI_FAKE ? new FakeBrain() : new OllamaBrain(getSettings);
+  brain = process.env.HEARTH_AI_FAKE ? new FakeBrain() : new OllamaBrain(getSettings, () => (mind && mind.growth ? mind.growth.activeModel() : null));
   body = new Body(store, getSettings);
   comfy = new Comfy(getSettings);
   voice = new Voice(store.p('models'));
@@ -274,6 +274,15 @@ function setupIpc() {
     } catch (e) { return { ok: false, reason: String(e.message || e) }; }
     finally { status.pulling = null; mind.emit('update'); }
   });
+  ipcMain.handle('growth:setup', () => mind.growth.setup());
+  ipcMain.handle('growth:grow', async () => {
+    const r = await dialog.showMessageBox(win, { type: 'question', buttons: ['Grow now', 'Cancel'], defaultId: 0, cancelId: 1, message: 'Grow ' + mind.state.name + '\u2019s brain now?', detail: 'Training uses the GPU for 20 to 60 minutes. Her mind rests while it runs. It stops on its own if you start a game.' });
+    if (r.response !== 0) return { ok: false };
+    mind.setStatus('resting', 'growing a new brain');
+    try { return await mind.growth.grow('you'); } finally { mind.setStatus('awake', 'thinking'); }
+  });
+  ipcMain.handle('growth:stop', () => { mind.growth.stop(); return true; });
+  ipcMain.handle('growth:use', (_e, gen) => { const r = mind.growth.useGeneration(gen); mind.emit('update'); return r; });
   ipcMain.handle('models:list', async () => (await brain.available()).models || []);
   ipcMain.handle('comfy:checkpoints', () => comfy.checkpoints());
   ipcMain.handle('open:workspace', () => shell.openPath(store.p('workspace', 'made')));

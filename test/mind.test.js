@@ -73,7 +73,7 @@ test('she lives: thinks, argues, talks, works, sleeps, dreams and backs up', asy
   assert.ok(mind.state.self.description, 'self description');
   assert.ok(store.selfTests.items.length === 1, 'self tests ran');
   assert.ok(listBackups(store).length === 1, 'backed up');
-  assert.ok(fs.readdirSync(path.join(dir, 'training')).length === 1, 'training data written');
+  assert.ok(fs.readdirSync(path.join(dir, 'training')).some((f) => /^\d{4}-\d\d-\d\d\.jsonl$/.test(f)), 'training data written');
   assert.equal(mind.state.status, 'awake');
   const snap = snapshot(mind, {});
   assert.equal(snap.drives.length, 6);

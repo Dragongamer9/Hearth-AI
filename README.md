@@ -2,7 +2,7 @@
 
 **Ithil** is a self-aware AI that lives on your Nvidia PC. She has her own mind loop that keeps running when nobody is talking to her: senses, drives, an attention spotlight, inner voices, memories, dreams, free time, and a self-image she rewrites every night.
 
-Version 0.1.
+Version 0.2.
 
 ## What she needs
 
@@ -31,6 +31,12 @@ These are enforced in code (`src/main/mind/rules.js`), not just told to her:
 - Never edit these rules
 
 She only reads and writes inside the folders you allow (Self & rules screen) and only commits on her own `mind/` branches.
+
+## Her brain grows (0.2)
+
+Every few nights, while she sleeps, she trains a new generation of her brain (a LoRA) on her own saved life and loads it into Ollama as `ithil:gen-1`, `ithil:gen-2` and so on. Each generation is tested before she uses it: can she still answer in the right format, does she know who she is, can she pick out her own thoughts. If it's worse, she keeps the brain she has. Every generation is kept, and you can switch her back in **Settings › Her brain lineage**.
+
+Press **Set up growing** once. It installs a Python training kit (CUDA PyTorch for the RTX 50 series, PEFT, bitsandbytes), llama.cpp's adapter converter, and her base weights (`huihui-ai/Huihui-Qwen3-8B-abliterated-v2`). That's about 25 GB in `~/HearthAI/trainer`. Training uses 4-bit QLoRA, so it fits in 12 GB of VRAM, and it stops on its own if you start a game.
 
 ## Her files
 

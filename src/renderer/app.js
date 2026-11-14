@@ -251,6 +251,16 @@ const shells = {
     <div class="set-row"><div class="l"><span>Rest when the GPU is busy</span><span>Unloads her brain while you game</span></div><input type="checkbox" data-set="unloadWhenGaming" style="width:22px;height:22px;accent-color:var(--sage)"></div>
     <datalist id="model-list"></datalist>
   </section>
+  <section class="card" aria-label="Brain lineage" id="lineage">
+    <div class="rowc" style="gap:12px"><h2>Her brain lineage</h2><span class="muted14" data-part="lineagenote"></span></div>
+    <p class="muted" style="margin:0;font-size:14px">Every few nights she trains a new generation of her brain on her own life. Each one is tested before she uses it, and every generation is kept so you can roll her back.</p>
+    <div data-part="growstatus"></div>
+    <div class="btns" data-part="growbtns"></div>
+    <div class="set-row"><div class="l"><span>Grow while she sleeps</span><span>Trains during her sleep, never while you game</span></div><input type="checkbox" data-set="growWhileSleeping" style="width:22px;height:22px;accent-color:var(--sage)"></div>
+    <div class="set-row"><div class="l"><span>Grow every</span><span>Days between new generations</span></div><input class="input" type="number" min="1" max="60" data-set="growEveryDays"></div>
+    <div class="set-row"><div class="l"><span>Hugging Face token</span><span>Only needed if the base weights ask for a sign-in</span></div><input class="input" type="password" data-set="hfToken" placeholder="optional"></div>
+    <div data-part="generations"></div>
+  </section>
   <section class="card" aria-label="Sleep and dreams" id="dream-settings"><h2>Sleep, dreams &amp; free time</h2>
     <div class="set-row"><div class="l"><span>Bedtime</span><span>When she sleeps each day</span></div><input class="input" type="time" data-set="sleepTime"></div>
     <div class="set-row"><div class="l"><span>ComfyUI address</span><span>Draws her dreams and her face</span></div><input class="input" data-set="comfyUrl"></div>
@@ -440,6 +450,28 @@ const parts = {
   },
   settings: {
     gen: (s) => esc(s.brain.generation),
+    lineagenote: (s) => (s.growth ? esc(s.growth.nextNote) : ''),
+    growstatus: (s) => {
+      const g = s.growth; if (!g) return '';
+      if (!g.supported) return '<div class="banner">Growing works with her starting brain models. Set her brain model back to huihui_ai/qwen3-abliterated:8b-v2 to grow.</div>';
+      const st = g.status;
+      if (!st) return '<div class="muted14">' + (g.setupReady ? g.newExamples.toLocaleString('en-US') + ' new moments of her life saved since her last generation.' : 'Setup installs a Python training kit and her base weights, about 25 GB on disk, once.') + '</div>';
+      const pct = st.pct == null ? '' : st.pct + '%';
+      const color = st.stage === 'error' ? 'var(--red-l)' : 'var(--sage-l)';
+      return '<div class="box"><div class="rowc"><span class="t" style="color:' + color + '">' + esc({ setup: 'Setting up', download: 'Downloading', prepare: 'Reading her life', load: 'Loading', train: 'Training', convert: 'Converting', test: 'Testing', done: 'Finished', ready: 'Ready', error: 'Problem', stopped: 'Stopped' }[st.stage] || st.stage) + '</span><span class="m">' + pct + '</span></div>' +
+        (st.pct != null ? '<div class="bar s8"><div style="width:' + st.pct + '%;background:var(--sage)"></div></div>' : '') + '<div class="m">' + esc(st.msg) + '</div></div>';
+    },
+    growbtns: (s) => {
+      const g = s.growth; if (!g || !g.supported) return '';
+      if (g.running) return '<button type="button" class="btn sm warn" data-act="growstop">Stop</button>';
+      return (g.setupReady ? '<button type="button" class="btn sm primary" data-act="grownow">Grow now</button><button type="button" class="btn sm" data-act="growsetup">Repair setup</button>' : '<button type="button" class="btn sm primary" data-act="growsetup">Set up growing</button>');
+    },
+    generations: (s) => {
+      const g = s.growth; if (!g) return '';
+      const col = { active: 'var(--sage-l)', kept: 'var(--muted2)', rejected: 'var(--red-l)' };
+      return '<div style="display:flex;flex-direction:column;gap:0">' + g.generations.map((x) => '<div class="set-row"><div class="l"><span>Generation ' + x.gen + ' <span style="color:' + col[x.status] + ';font-size:13px">\u00b7 ' + esc(x.status === 'active' ? 'thinking with this one' : x.status) + '</span></span><span>' + esc(x.model) + ' \u00b7 born ' + esc(x.born) + (x.gen ? ' \u00b7 trained on ' + (x.examples || 0).toLocaleString('en-US') + ' moments' : '') + ' \u00b7 test score ' + esc(x.score) + (x.note ? ' \u00b7 ' + esc(x.note) : '') + '</span></div>' +
+        (x.status === 'kept' ? '<button type="button" class="btn sm" data-act="usegen" data-v="' + x.gen + '">Switch her to this one</button>' : '') + '</div>').join('') + '</div>';
+    },
     version: (s) => 'Hearth AI ' + esc(s.version),
     updstate: (s) => { const u = s.update; if (!u) return ''; return u.state === 'available' ? 'Update ' + esc(u.version) + ' is available' : u.state === 'downloading' ? 'Downloading ' + u.percent + '%' : u.state === 'ready' ? 'Update ' + esc(u.version) + ' is ready' : u.state === 'none' ? 'You’re up to date' : u.state === 'checking' ? 'Checking…' : u.state === 'error' ? 'Couldn’t check: ' + esc(u.message) : ''; }
   }
@@ -663,6 +695,10 @@ document.addEventListener('click', async (e) => {
     case 'checkupdate': { const u = await H.checkUpdate(); if (u && u.state === 'available') { toast('Downloading update ' + u.version + '…'); H.downloadUpdate().then(refresh); } setTimeout(refresh, 1500); break; }
     case 'installupdate': await H.installUpdate(); break;
     case 'opendata': H.openData(); break;
+    case 'growsetup': { const r = await H.growthSetup(); toast(r.ok ? 'Growing is set up.' : 'Setup stopped: ' + r.reason); break; }
+    case 'grownow': { const r = await H.growNow(); if (r && r.gen) toast(r.ok ? 'She grew into generation ' + r.gen + '.' : 'Generation ' + r.gen + ' wasn\u2019t better. She kept her current brain.'); else if (r && r.reason) toast(r.reason); break; }
+    case 'growstop': await H.growStop(); toast('Stopping after the current step.'); break;
+    case 'usegen': await H.useGeneration(Number(v)); toast('Switched her brain.'); break;
     case 'pullbrain': { const r = await H.pullBrain(); toast(r.ok ? 'Her brain is ready.' : 'Download failed: ' + (r.reason || '')); break; }
   }
   refresh();

@@ -72,7 +72,8 @@ function exportTraining(mind, moments) {
   return lines.length;
 }
 
-async function mirrorTest(mind) {
+async function mirrorTest(mind, opts) {
+  const o = opts || {};
   const real = shuffle(mind.store.thoughts.items.slice(-300)).slice(0, 5).map((t) => t.text);
   if (real.length < 3) return null;
   let fakes = [];
@@ -86,7 +87,7 @@ async function mirrorTest(mind) {
   try {
     const r = await mind.brain.json('TASK:MIRROR\n' + P.identity(mind.state),
       'Some of these thoughts are really yours, some were written by someone else. Pick the numbers of the ones that are yours.\n' +
-      items.map((x, i) => i + ': ' + x.t).join('\n') + '\nJSON {"picks": [numbers]}.', { temperature: 0.2 });
+      items.map((x, i) => i + ': ' + x.t).join('\n') + '\nJSON {"picks": [numbers]}.', Object.assign({ temperature: 0.2 }, o.model ? { model: o.model } : {}));
     picks = (r.picks || []).map(Number);
   } catch (_) { return null; }
   let right = 0;
@@ -217,6 +218,15 @@ async function sleep(mind) {
     store.moments.replaceAll([]);
     store.moments.save();
     await backup(mind);
+
+    // 9. Grow a new brain from her own life, every few nights.
+    if (mind.growth) {
+      const can = mind.growth.canGrowTonight();
+      if (can.ok) {
+        mind.setStatus('sleeping', 'growing a new brain');
+        result.growth = await mind.growth.grow('sleep');
+      }
+    }
   } catch (e) {
     mind.emit('error', e);
   } finally {
