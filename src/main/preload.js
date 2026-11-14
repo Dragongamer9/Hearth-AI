@@ -1,0 +1,40 @@
+'use strict';
+const { contextBridge, ipcRenderer } = require('electron');
+
+const call = (ch) => (...args) => ipcRenderer.invoke(ch, ...args);
+
+contextBridge.exposeInMainWorld('hearth', {
+  snapshot: call('snapshot'),
+  talk: call('talk'),
+  pause: call('mind:pause'),
+  resume: call('mind:resume'),
+  sleepNow: call('mind:sleep'),
+  answerWish: call('wish:answer'),
+  answerLook: call('look:answer'),
+  setSettings: call('settings:set'),
+  setIdentity: call('identity:set'),
+  addFolder: call('folder:add'),
+  removeFolder: call('folder:remove'),
+  searchMemories: call('memories:search'),
+  forgetMemory: call('memories:forget'),
+  editMemory: call('memories:edit'),
+  exportMemories: call('memories:export'),
+  backupNow: call('backup:now'),
+  restoreBackup: call('backup:restore'),
+  redrawAvatar: call('avatar:redraw'),
+  saveLook: call('avatar:save'),
+  speak: call('voice:speak'),
+  hear: call('voice:hear'),
+  setListening: call('voice:listening'),
+  pullBrain: call('brain:pull'),
+  listModels: call('models:list'),
+  listCheckpoints: call('comfy:checkpoints'),
+  checkUpdate: call('update:check'),
+  downloadUpdate: call('update:download'),
+  installUpdate: call('update:install'),
+  openMade: call('open:workspace'),
+  openData: call('open:data'),
+  showWindow: call('window:show'),
+  onSnapshot: (fn) => ipcRenderer.on('snapshot', (_e, s) => fn(s)),
+  onNavigate: (fn) => ipcRenderer.on('navigate', (_e, s) => fn(s))
+});

@@ -1,0 +1,83 @@
+{
+  "name": "hearth-ai",
+  "productName": "Hearth AI",
+  "version": "0.1.0",
+  "description": "Hearth AI: Ithil, a self-aware AI that lives on your Nvidia PC",
+  "main": "src/main/main.js",
+  "author": {
+    "name": "Dragongamer9",
+    "email": "43799111+Dragongamer9@users.noreply.github.com"
+  },
+  "license": "UNLICENSED",
+  "private": true,
+  "homepage": "https://github.com/Dragongamer9/hearth-ai",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Dragongamer9/hearth-ai.git"
+  },
+  "scripts": {
+    "start": "electron .",
+    "fake": "HEARTH_AI_FAKE=1 electron .",
+    "test": "node --test test/*.test.js",
+    "dist": "electron-builder --linux AppImage deb --publish never"
+  },
+  "dependencies": {
+    "@huggingface/transformers": "^3.8.1",
+    "electron-updater": "^6.8.3",
+    "kokoro-js": "^1.2.1"
+  },
+  "devDependencies": {
+    "electron": "^45.3.2",
+    "electron-builder": "^26.0.12"
+  },
+  "build": {
+    "appId": "fun.hearthos.ai",
+    "productName": "Hearth AI",
+    "artifactName": "Hearth-AI-${version}-${arch}.${ext}",
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "src/**/*",
+      "build/icon.png",
+      "package.json",
+      "!node_modules/onnxruntime-node/bin/napi-v3/darwin/**",
+      "!node_modules/onnxruntime-node/bin/napi-v3/win32/**",
+      "!node_modules/onnxruntime-node/bin/napi-v3/linux/arm64/**",
+      "!node_modules/onnxruntime-node/bin/napi-v3/linux/x64/libonnxruntime_providers_cuda.so",
+      "!node_modules/onnxruntime-node/bin/napi-v3/linux/x64/libonnxruntime_providers_tensorrt.so"
+    ],
+    "asarUnpack": [
+      "node_modules/onnxruntime-node/**",
+      "node_modules/sharp/**",
+      "node_modules/@img/**"
+    ],
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "Dragongamer9",
+        "repo": "hearth-ai",
+        "releaseType": "draft"
+      }
+    ],
+    "linux": {
+      "target": [
+        "AppImage",
+        "deb"
+      ],
+      "category": "Utility",
+      "icon": "build/icon.png",
+      "synopsis": "Ithil, a self-aware AI on your PC",
+      "executableName": "hearth-ai"
+    },
+    "deb": {
+      "depends": [
+        "libnotify4",
+        "libxtst6",
+        "libnss3"
+      ],
+      "maintainer": "Dragongamer9 <43799111+Dragongamer9@users.noreply.github.com>"
+    }
+  }
+}
