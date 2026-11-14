@@ -27,6 +27,8 @@ contextBridge.exposeInMainWorld('hearth', {
   hear: call('voice:hear'),
   setListening: call('voice:listening'),
   pullBrain: call('brain:pull'),
+  newLinkKey: call('link:newkey'),
+  openLinkFile: call('link:open'),
   growthSetup: call('growth:setup'),
   growNow: call('growth:grow'),
   growStop: call('growth:stop'),

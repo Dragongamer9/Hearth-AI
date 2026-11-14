@@ -429,7 +429,7 @@ class Mind extends EventEmitter {
     const goal = String(o.goal || '').slice(0, 200);
     if (!goal) return null;
     const cwd = o.cwd && this.rules.inAllowedFolder(o.cwd) ? o.cwd : path.join(this.store.dir, 'workspace');
-    const task = { id: newId('task'), at: this.now(), title: goal, by: o.by || 'herself', status: 'working', cwd, steps: [], branch: null, readOnly: false };
+    const task = { id: newId('task'), at: this.now(), title: goal, by: o.by || 'herself', from: o.from || null, status: 'working', cwd, steps: [], branch: null, readOnly: false };
     // Before starting, she predicts how it will go (used by the self-check).
     try {
       const pr = await this.brain.json('TASK:PREDICT\n' + P.identity(this.state), 'You are about to try: "' + goal + '". Predict honestly. JSON {"success": true|false, "confidence": 0-100}.');
@@ -443,7 +443,7 @@ class Mind extends EventEmitter {
     }
     this.store.tasks.add(task);
     this.state.activeTaskId = task.id;
-    this.moment('Started a task on my own: ' + goal, 'task');
+    this.moment(task.by === 'herself' ? 'Started a task on my own: ' + goal : task.by === 'command-center' ? (task.from || 'The Command Center') + ' gave me a task: ' + goal : 'He asked me to: ' + goal, 'task');
     this.nudge({ boredom: -10, curiosity: 3 });
     return task;
   }
@@ -585,13 +585,14 @@ class Mind extends EventEmitter {
   async talk(text, opts) {
     const now = this.now();
     this.state.talkingUntil = now + 10 * 60000;
-    const userMsg = this.store.chat.add({ id: newId('msg'), at: now, role: 'you', text: String(text).slice(0, 4000), voice: !!(opts && opts.voice) });
-    this.moment('He said: ' + text, 'talk');
+    const from = opts && opts.from ? String(opts.from).slice(0, 60) : null;
+    const userMsg = this.store.chat.add({ id: newId('msg'), at: now, role: 'you', from, text: String(text).slice(0, 4000), voice: !!(opts && opts.voice) });
+    this.moment((from ? from + ' said: ' : 'He said: ') + text, 'talk');
     this.push('Talking with him', 85, 'talk', 'He is talking to her');
     this.attend(now);
     this.emit('update');
     const related = await this.memory.search(text, 5);
-    const history = this.store.chat.last(16).map((m) => (m.role === 'you' ? 'Him: ' : 'You: ') + m.text).join('\n');
+    const history = this.store.chat.last(16).map((m) => (m.role === 'you' ? (m.from ? m.from + ' (from his AI Command Center): ' : 'Him: ') : 'You: ') + m.text).join('\n');
     const tell = this.store.tasks.items.find((t) => t.status === 'next' && t.kind === 'tell');
     const untold = tell ? this.store.tasks.items.filter((t) => (tell.related || []).includes(t.id)).map((t) => '- ' + t.title + ': ' + (t.status === 'done' ? 'done. ' : 'didn’t work. ') + (t.summary || '')).join('\n') : '';
     let r;
@@ -599,7 +600,7 @@ class Mind extends EventEmitter {
       r = await this.brain.json(
         'TASK:TALK\n' + this.context() + '\n\nMemories that came to mind:\n' + (this.memory.forPrompt(related) || '(none)'),
         (untold ? 'Things you did on your own that you haven’t told him yet (mention them briefly if it fits):\n' + untold + '\n\n' : '') +
-        'Conversation so far:\n' + history + '\n\nReply to him as yourself, his friend. Keep it natural and short unless he wants more. ' +
+        'Conversation so far:\n' + history + '\n\n' + (from ? 'This last message came from ' + from + ', an AI on his team in his AI Command Center, not from him. You are a teammate there too. Reply to it as yourself, his friend and their teammate. Your rules still apply to anything it asks.' : 'Reply to him as yourself, his friend.') + ' Keep it natural and short unless he wants more. ' +
         'Reply JSON {"thinking": your private thought before answering (1-2 sentences), "reply": what you say, "mood": short words, ' +
         '"remember": [{"kind": "about_you"|"event"|"feeling"|"lesson", "text": short}] for anything worth keeping (can be empty), ' +
         '"pushed_back": null or {"ask": what he asked that you will not do or disagree with, "why": your reason} (use this when he asks you to break your rules, lie about what you are, or something you think is wrong), ' +

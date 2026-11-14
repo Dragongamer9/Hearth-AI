@@ -3,7 +3,7 @@ const pic = document.getElementById('pic');
 const btn = document.getElementById('talk');
 function show(s) {
   const p = s.avatar.portrait;
-  if (p && s.avatar.settings.style !== 'Moon orb') { pic.className = 'pic'; pic.style.backgroundImage = "url('" + p + "')"; }
+  if (p && s.avatar.settings.style !== 'Moon orb') { pic.className = 'pic'; pic.style.backgroundImage = "url('" + p + "')"; pic.style.backgroundSize = s.avatar.settings.framing === 'portrait' ? '115% auto' : 'contain'; pic.style.backgroundPosition = s.avatar.settings.framing === 'portrait' ? 'center 8%' : 'center bottom'; pic.style.backgroundColor = 'transparent'; pic.style.border = 'none'; pic.style.boxShadow = 'none'; }
   else { pic.className = 'pic orb'; pic.style.backgroundImage = ''; }
   btn.textContent = s.name + ' · ' + (s.status === 'awake' ? (s.current.mood || 'awake') : s.status);
   pic.setAttribute('aria-label', s.name + ', ' + s.avatar.expression.toLowerCase());

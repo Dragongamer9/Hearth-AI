@@ -72,7 +72,7 @@ function snapshot(mind, extra) {
     : { badge: 'Done', badgeBg: '#252d28', badgeFg: '#b3c0b8' };
   const taskMeta = (t) => {
     if (t.status === 'next') return 'Queued after the last task';
-    const by = t.by === 'you' ? 'Asked by you' : 'Started by herself';
+    const by = t.by === 'you' ? 'Asked by you' : t.by === 'command-center' ? 'Asked by ' + (t.from || 'the AI Command Center') : 'Started by herself';
     const where = t.branch ? ' · branch ' + t.branch : t.readOnly ? ' · read only' : '';
     const mins = Math.max(1, Math.round(((t.endedAt || now) - t.at) / 60000));
     return by + where + ' · ' + mins + ' min';
@@ -189,7 +189,7 @@ function snapshot(mind, extra) {
     autonomy: 'Autonomy: ' + s.autonomy,
     brain: { model: mind.growth ? mind.growth.activeModel() : st.chatModel, generation: mind.growth ? mind.growth.active().gen : s.brain.generation, ok: x.brainOk !== false },
     growth: mind.growth ? mind.growth.view() : null,
-    commandCenter: 'not connected',
+    commandCenter: x.link && x.link.connected ? 'connected' : 'not connected',
     current: s.current,
     drives: [drive('Curiosity', d.curiosity, GREEN), drive('Energy', d.energy, GREEN), drive('Confidence', d.confidence, AMBER), drive('Satisfaction', d.satisfaction, AMBER), drive('Boredom', d.boredom, BLUE), drive('Frustration', d.frustration, RED)],
     monologue: store.thoughts.last(5).map((t) => ({ time: clock(t.at), text: t.text })),

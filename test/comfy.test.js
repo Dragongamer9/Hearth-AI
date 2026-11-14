@@ -52,8 +52,11 @@ test('her face set comes from one base portrait, zoomed out, swapped in at the e
     assert.equal(p['10'].inputs.image, 'base.png', 'every other face starts from the base');
     assert.ok(p['3'].inputs.denoise < 0.6);
   }
-  assert.match(f.prompts[0]['6'].inputs.text, /whole head/);
+  assert.match(f.prompts[0]['6'].inputs.text, /full body, standing, entire body in frame from head to feet/);
+  const c2 = new Comfy(() => ({}));
+  assert.match(c2.avatarPrompt(Object.assign({}, av, { framing: 'portrait' }), 'calm'), /whole head and hair fully in frame/);
   assert.match(f.prompts[0]['7'].inputs.text, /cropped head/);
+  assert.match(f.prompts[0]['7'].inputs.text, /cropped feet/);
   assert.notEqual(fs.readFileSync(path.join(dir, 'calm.png'), 'utf8'), 'OLD');
   assert.ok(!fs.existsSync(dir + '.new') && !fs.existsSync(dir + '.old'));
 });

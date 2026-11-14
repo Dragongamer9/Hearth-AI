@@ -18,9 +18,10 @@ function toast(msg) {
   t.className = 'toast'; t.textContent = msg; document.body.appendChild(t);
   setTimeout(() => t.remove(), 4000);
 }
+function faceCrop(s) { return s.avatar.settings.framing === 'portrait' ? 'background-size:150% auto;background-position:center 12%' : 'background-size:330% auto;background-position:center 5%'; }
 function orbStyle(s, size) {
   const show = s.avatar.settings.places.mind && s.avatar.portrait && s.avatar.settings.style !== 'Moon orb';
-  return { cls: 'orb' + (show ? ' photo' : ''), style: 'width:' + size + 'px;height:' + size + 'px;' + (show ? "background-image:url('" + s.avatar.portrait + "')" : '') };
+  return { cls: 'orb' + (show ? ' photo' : ''), style: 'width:' + size + 'px;height:' + size + 'px;' + (show ? "background-image:url('" + s.avatar.portrait + "');" + faceCrop(s) : '') };
 }
 
 /* ---------------- shells ---------------- */
@@ -98,6 +99,7 @@ const shells = {
       <section class="card" aria-label="Her look" style="gap:16px">
         <h2>Her look</h2>
         <div style="display:flex;flex-direction:column;gap:8px"><div class="muted14" style="color:var(--muted2)">Style</div><div class="btns" style="gap:8px" role="group" aria-label="Avatar style" data-part="styles"></div></div>
+        <div style="display:flex;flex-direction:column;gap:8px"><div class="muted14" style="color:var(--muted2)">Show</div><div class="btns" style="gap:8px" role="group" aria-label="How much of her to draw" data-part="framing"></div></div>
         <div style="display:flex;flex-direction:column;gap:8px"><div class="muted14" style="color:var(--muted2)">Start from a character</div><div class="roster" data-part="roster"></div></div>
         <div style="display:flex;flex-direction:column;gap:12px"><div class="muted14" style="color:var(--muted2)">Character creator</div><div data-part="creator"></div></div>
         <label class="check"><input type="checkbox" data-set="avatar.letHerSuggest" id="let-suggest">Let her suggest changes to how she looks</label>
@@ -274,6 +276,11 @@ const shells = {
     <div class="set-row"><div class="l"><span>Version</span><span data-part="version"></span></div><div class="btns"><span class="muted14" data-part="updstate"></span><button type="button" class="btn sm" data-act="checkupdate">Check for updates</button><button type="button" class="btn sm primary" data-act="installupdate" hidden>Restart and update</button></div></div>
     <div class="set-row"><div class="l"><span>Her files</span><span>Memories, dreams, backups and training data</span></div><button type="button" class="btn sm" data-act="opendata">Open folder</button></div>
   </section>
+  <section class="card" aria-label="AI Command Center"><div class="rowc" style="gap:12px"><h2>AI Command Center</h2><span class="muted14" data-part="linkstate"></span></div>
+    <div class="set-row"><div class="l"><span>Let the Command Center connect</span><span>Her team lead can talk to her and hand her tasks. Her rules still apply.</span></div><input type="checkbox" data-set="allowCommandCenter" style="width:22px;height:22px;accent-color:var(--sage)"></div>
+    <div class="set-row"><div class="l"><span>Allow connections from my other devices</span><span>Off means only this PC can reach her</span></div><input type="checkbox" data-set="allowLanConnections" style="width:22px;height:22px;accent-color:var(--sage)"></div>
+    <div class="set-row"><div class="l"><span>Connection key</span><span data-part="linkfile"></span></div><div class="btns"><button type="button" class="btn sm" data-act="linkfile">Show key file</button><button type="button" class="btn sm warn" data-act="linkkey">Make a new key</button></div></div>
+  </section>
 </main>`
 };
 
@@ -317,7 +324,7 @@ const parts = {
           lastDay = day;
         }
         lastAt = m.at;
-        if (m.role === 'you') out += '<div class="me">' + esc(m.text) + '</div>';
+        if (m.role === 'you') out += m.from ? '<div class="me" style="background:#2a2f3a"><div style="font-size:12px;color:var(--muted);margin-bottom:4px">From ' + esc(m.from) + ' \u00b7 AI Command Center</div>' + esc(m.text) + '</div>' : '<div class="me">' + esc(m.text) + '</div>';
         else out += '<div class="her">' + (m.thinking ? '<details><summary>What she was thinking before she answered</summary><p>' + esc(m.thinking) + '</p></details>' : '') +
           '<div class="bubble">' + esc(m.text) + '</div><button type="button" class="btn sm speak" data-act="speak" data-id="' + esc(m.id) + '" aria-label="Hear her say this">' + ICON_PLAY + '</button></div>';
       }
@@ -338,7 +345,8 @@ const parts = {
       if (av.portrait) return '<img id="portrait-img" class="breathing" alt="" src="' + esc(av.portrait) + '">' + (av.blink ? '<img id="blink-img" alt="" src="' + esc(av.blink) + '" style="opacity:0">' : '') + (av.talking ? '<img id="talk-img" alt="" src="' + esc(av.talking) + '" style="opacity:0">' : '');
       return '<span class="moon" aria-hidden="true"></span><div class="ghost" aria-hidden="true"></div><span class="cap">Not drawn yet · press Redraw her</span>';
     },
-    faces: (s) => s.avatar.faces.map((f) => '<div class="face' + (f.on ? ' on' : '') + '"><div class="c" role="img" aria-label="' + esc(f.label) + ' expression"' + (f.img ? " style=\"background-image:url('" + esc(f.img) + "')\"" : '') + '></div><span style="color:' + (f.on ? 'var(--text)' : 'var(--muted)') + '">' + esc(f.label) + '</span></div>').join(''),
+    faces: (s) => s.avatar.faces.map((f) => '<div class="face' + (f.on ? ' on' : '') + '"><div class="c" role="img" aria-label="' + esc(f.label) + ' expression"' + (f.img ? " style=\"background-image:url('" + esc(f.img) + "');" + faceCrop(s) + "\"" : '') + '></div><span style="color:' + (f.on ? 'var(--text)' : 'var(--muted)') + '">' + esc(f.label) + '</span></div>').join(''),
+    framing: (s) => [['full', 'Full body'], ['portrait', 'Head & shoulders']].map(([k, l]) => '<button type="button" class="pill" aria-pressed="' + ((s.avatar.settings.framing || 'full') === k) + '" data-act="framing" data-v="' + k + '">' + l + '</button>').join(''),
     styles: (s) => ['Anime', 'Semi-real', '3D', 'Moon orb'].map((x) => '<button type="button" class="pill" aria-pressed="' + (s.avatar.settings.style === x) + '" data-act="style" data-v="' + x + '">' + x + '</button>').join(''),
     roster: (s) => {
       const bg = { Moonlit: 'linear-gradient(180deg,#3a4660,#1a2233)', Scholar: 'linear-gradient(180deg,#4a3e2e,#221c15)', Ranger: 'linear-gradient(180deg,#2e4a36,#15221a)', Tinkerer: 'linear-gradient(180deg,#4a2e3e,#22151c)' };
@@ -357,8 +365,9 @@ const parts = {
     },
     voices: (s) => Object.keys(s.ttsVoices).map((k) => { const v = s.ttsVoices[k], on = s.avatar.settings.voice === k;
       return '<div class="voice-opt' + (on ? ' on' : '') + '" data-act="pickvoice" data-v="' + k + '"><button type="button" class="play" aria-label="Play ' + esc(v.name) + ' sample" data-act="sample" data-v="' + k + '">' + ICON_PLAY + '</button><div style="display:flex;flex-direction:column;gap:2px;min-width:0"><span style="font-size:15px;font-weight:600">' + esc(v.name) + '</span><span class="muted">' + esc(v.what) + '</span></div><span style="margin-left:auto;font-size:13px;color:var(--sage-l)">' + (on ? 'Picked' : '') + '</span></div>'; }).join(''),
-    places: (s) => [['talk', 'Talk screen', 'Next to your chat with her'], ['buddy', 'Desktop buddy', 'Small floating ' + s.name + ' on your Hearth OS desktop'], ['mind', 'Mind screen', 'Replaces the orb at the top'], ['commandCenter', 'AI Command Center', 'When you connect it later']].map(([k, n, w]) =>
-      '<label class="tog"><span class="t"><span class="n">' + esc(n) + '</span><span class="w">' + esc(w) + '</span></span><input type="checkbox" data-place="' + k + '"' + (s.avatar.settings.places[k] ? ' checked' : '') + (k === 'commandCenter' ? ' disabled' : '') + '></label>').join('')
+    places: (s) => { const cc = s.link && s.link.connected;
+      return [['talk', 'Talk screen', 'Next to your chat with her'], ['buddy', 'Desktop buddy', 'Small floating ' + s.name + ' on your Hearth OS desktop'], ['mind', 'Mind screen', 'Replaces the orb at the top'], ['commandCenter', 'AI Command Center', cc ? 'Connected \u00b7 her face shows on your team' : 'When you connect it later']].map(([k, n, w]) =>
+      '<label class="tog"><span class="t"><span class="n">' + esc(n) + '</span><span class="w">' + esc(w) + '</span></span><input type="checkbox" data-place="' + k + '"' + (s.avatar.settings.places[k] || (k === 'commandCenter' && cc) ? ' checked' : '') + (k === 'commandCenter' && !cc ? ' disabled' : '') + '></label>').join(''); }
   },
   attention: {
     spot: (s) => {
@@ -450,6 +459,8 @@ const parts = {
   },
   settings: {
     gen: (s) => esc(s.brain.generation),
+    linkstate: (s) => (!s.link ? '' : !s.link.enabled ? 'Off' : s.link.connected ? 'Connected \u00b7 ' + esc(s.link.client || '') : 'Waiting for it on port ' + s.link.port),
+    linkfile: (s) => (s.link ? esc(s.link.keyFile.replace(/^\/home\/[^/]+/, '~')) + ' \u00b7 the Command Center reads it from there' : ''),
     lineagenote: (s) => (s.growth ? esc(s.growth.nextNote) : ''),
     growstatus: (s) => {
       const g = s.growth; if (!g) return '';
@@ -521,6 +532,8 @@ function render() {
   for (const a of document.querySelectorAll('.side a')) {
     if (a.getAttribute('data-nav') === ui.screen) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current');
   }
+  const cc = $('[data-part="ccbox"]');
+  if (cc) { cc.textContent = 'AI Command Center: ' + s.commandCenter; cc.style.borderStyle = s.commandCenter === 'connected' ? 'solid' : 'dashed'; cc.style.color = s.commandCenter === 'connected' ? 'var(--sage-l)' : ''; }
   const bl = $('[data-part="brainline"]');
   if (bl) bl.textContent = 'Brain: ' + s.brain.model + ' (gen ' + s.brain.generation + ') on your Nvidia PC (RTX 5070) · Ollama · offline' + (s.brain.ok ? '' : ' · not reachable');
   avatarLife(s);
@@ -672,6 +685,7 @@ document.addEventListener('click', async (e) => {
     case 'redraw': { const r = await H.redrawAvatar(); if (!r.ok) toast('Couldn’t draw her: ' + r.reason); break; }
     case 'savelook': { await saveCreator(); const r = await H.saveLook(); toast(r.ok ? 'Saved. Her new look is drawn.' : 'Saved her look. Drawing failed: ' + r.reason); break; }
     case 'style': await H.setSettings({ avatar: { style: v } }); break;
+    case 'framing': await H.setSettings({ avatar: { framing: v } }); toast('Press Redraw her to draw her ' + (v === 'full' ? 'full body.' : 'head and shoulders.')); break;
     case 'roster': await H.setSettings({ avatar: Object.assign({ roster: v }, s.roster[v]) }); rebuild(); break;
     case 'look-yes': await H.answerLook(true); toast('Trying her idea. Redrawing…'); break;
     case 'look-no': await H.answerLook(false); break;
@@ -695,6 +709,8 @@ document.addEventListener('click', async (e) => {
     case 'checkupdate': { const u = await H.checkUpdate(); if (u && u.state === 'available') { toast('Downloading update ' + u.version + '…'); H.downloadUpdate().then(refresh); } setTimeout(refresh, 1500); break; }
     case 'installupdate': await H.installUpdate(); break;
     case 'opendata': H.openData(); break;
+    case 'linkfile': H.openLinkFile(); break;
+    case 'linkkey': await H.newLinkKey(); toast('New key made. The Command Center picks it up from the key file.'); break;
     case 'growsetup': { const r = await H.growthSetup(); toast(r.ok ? 'Growing is set up.' : 'Setup stopped: ' + r.reason); break; }
     case 'grownow': { const r = await H.growNow(); if (r && r.gen) toast(r.ok ? 'She grew into generation ' + r.gen + '.' : 'Generation ' + r.gen + ' wasn\u2019t better. She kept her current brain.'); else if (r && r.reason) toast(r.reason); break; }
     case 'growstop': await H.growStop(); toast('Stopping after the current step.'); break;

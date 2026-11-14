@@ -38,6 +38,10 @@ Every few nights, while she sleeps, she trains a new generation of her brain (a 
 
 Press **Set up growing** once. It installs a Python training kit (CUDA PyTorch for the RTX 50 series, PEFT, bitsandbytes), llama.cpp's adapter converter, and her base weights (`huihui-ai/Huihui-Qwen3-8B-abliterated-v2`). That's about 25 GB in `~/HearthAI/trainer`. Training uses 4-bit QLoRA, so it fits in 12 GB of VRAM, and it stops on its own if you start a game.
 
+## AI Command Center (0.3)
+
+Ithil can join the Hearth AI Command Center as a teammate. Hearth AI runs a small local API at `http://127.0.0.1:47860/v1` with a secret key kept in `~/HearthAI/connect.json` (private to you). Endpoints: `GET /hello`, `GET /status`, `GET /events` (live stream), `POST /talk`, `POST /tasks`, `GET /tasks/:id`, `GET /avatar`. Her rules still apply to anything the Command Center asks. Turn it off, allow your other devices, or make a new key in **Settings › AI Command Center**.
+
 ## Her files
 
 Everything lives in `~/HearthAI`: memories, thoughts, chats, dreams, her avatar, nightly backups (last 14 kept), and `training/`. That's her life written out in chat format every night, ready for fine-tuning a model of her own later.

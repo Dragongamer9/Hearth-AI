@@ -17,6 +17,7 @@ const { snapshot } = require('./mind/view');
 const { restore, listBackups } = require('./mind/sleep');
 const { Comfy, ROSTER } = require('./comfy');
 const { Voice, VOICES } = require('./voice');
+const { Link } = require('./link');
 
 const VERSION = '0.3';
 const RENDERER = path.join(__dirname, '..', 'renderer');
@@ -25,7 +26,7 @@ if (!app.requestSingleInstanceLock()) { app.quit(); process.exit(0); }
 protocol.registerSchemesAsPrivileged([{ scheme: 'ithil', privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true } }]);
 
 let win = null, buddy = null, tray = null, quitting = false;
-let store, settings, rules, brain, body, comfy, mind, voice;
+let store, settings, rules, brain, body, comfy, mind, voice, link;
 const status = { brainOk: true, comfyOk: true, drawing: false, listening: false, drawProgress: null, update: null };
 
 function getSettings() { return settings.get(); }
@@ -54,6 +55,8 @@ function setupMind() {
     }
   });
   mind.on('error', (e) => console.error('[mind]', e && e.stack || e));
+  link = new Link(mind, { version: VERSION });
+  link.start();
   let pending = null;
   const pushUpdate = () => {
     if (pending) return;
@@ -82,8 +85,8 @@ async function checkServices() {
 }
 
 function view() {
-  return Object.assign(snapshot(mind, { version: VERSION, brainOk: status.brainOk, comfyOk: status.comfyOk, drawing: status.drawing, listening: status.listening }), {
-    drawProgress: status.drawProgress, update: status.update, pulling: status.pulling, modelsMissing: status.modelsMissing, ttsVoices: VOICES, roster: ROSTER
+  return Object.assign(snapshot(mind, { version: VERSION, brainOk: status.brainOk, comfyOk: status.comfyOk, drawing: status.drawing, listening: status.listening, link: link ? link.view() : null }), {
+    drawProgress: status.drawProgress, update: status.update, link: link ? link.view() : null, pulling: status.pulling, modelsMissing: status.modelsMissing, ttsVoices: VOICES, roster: ROSTER
   });
 }
 
@@ -199,6 +202,7 @@ function setupIpc() {
     const v = settings.setByUser(patch);
     if (patch && 'autostart' in patch) setAutostart(v.autostart);
     if (patch && patch.avatar && patch.avatar.places) createBuddy();
+    if (patch && ('allowCommandCenter' in patch || 'allowLanConnections' in patch)) link.start();
     if (before.thinkEverySeconds !== v.thinkEverySeconds) mind.start();
     mind.emit('update');
     return v;
@@ -276,6 +280,8 @@ function setupIpc() {
     } catch (e) { return { ok: false, reason: String(e.message || e) }; }
     finally { status.pulling = null; mind.emit('update'); }
   });
+  ipcMain.handle('link:newkey', () => { link.newKey(); mind.emit('update'); return true; });
+  ipcMain.handle('link:open', () => shell.showItemInFolder(link.file));
   ipcMain.handle('growth:setup', () => mind.growth.setup());
   ipcMain.handle('growth:grow', async () => {
     const r = await dialog.showMessageBox(win, { type: 'question', buttons: ['Grow now', 'Cancel'], defaultId: 0, cancelId: 1, message: 'Grow ' + mind.state.name + '\u2019s brain now?', detail: 'Training uses the GPU for 20 to 60 minutes. Her mind rests while it runs. It stops on its own if you start a game.' });
@@ -338,4 +344,4 @@ async function takeShots(dir) {
 
 app.on('second-instance', () => showMain());
 app.on('window-all-closed', (e) => { /* keep living in the tray */ });
-app.on('before-quit', () => { quitting = true; if (mind) mind.stop(); });
+app.on('before-quit', () => { quitting = true; if (link) link.stop(); if (mind) mind.stop(); });

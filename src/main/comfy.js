@@ -26,7 +26,7 @@ const NEG = 'lowres, bad anatomy, bad hands, text, watermark, signature, blurry,
 // Her face set: the base portrait first, then every expression made from it so she stays the same person.
 const FACE_DENOISE = { blink: 0.32, talking: 0.32 };
 const EXPR_DENOISE = 0.48;
-const NEG_FRAME = ', close-up, cropped head, cut off head, head out of frame, face cut off, extreme close-up';
+const NEG_FRAME = ', close-up, cropped head, cut off head, head out of frame, face cut off, extreme close-up, cropped feet, feet out of frame, cut off legs';
 
 class Comfy {
   constructor(getSettings) { this.getSettings = getSettings; this.busy = false; }
@@ -122,7 +122,10 @@ class Comfy {
   }
   avatarPrompt(av, expr, night) {
     const outfit = night && av.nightOutfit && av.nightOutfit !== 'Same as day' ? av.nightOutfit : av.outfit;
-    return ['masterpiece, best quality', STYLE[av.style] || STYLE.Anime, '1girl, solo, cowboy shot, zoomed out, whole head and hair fully in frame, space above head, face in upper third, centered, looking at viewer',
+    const frame = av.framing === 'portrait'
+      ? '1girl, solo, cowboy shot, zoomed out, whole head and hair fully in frame, space above head, face in upper third, centered, looking at viewer'
+      : '1girl, solo, full body, standing, entire body in frame from head to feet, shoes visible, space above head and below feet, centered, looking at viewer';
+    return ['masterpiece, best quality', STYLE[av.style] || STYLE.Anime, frame,
       'named Ithil, ' + av.hair + ' hair, ' + av.eyes + ' eyes, wearing ' + outfit,
       EXPR[expr] || EXPR.calm, 'moonlit night background, soft rim light, accent color ' + av.accent].join(', ');
   }
