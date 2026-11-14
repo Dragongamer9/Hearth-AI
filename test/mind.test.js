@@ -109,3 +109,17 @@ test('settings are saved and survive a restart', () => {
   assert.equal(again.get().avatar.hair, 'Black');
   assert.equal(again.get().avatar.eyes, 'Pale blue');
 });
+
+test('her mind leaves the GPU alone while her face is being drawn', async () => {
+  const { mind, store } = makeMind();
+  await mind.tick();
+  const before = store.thoughts.items.length;
+  mind.gpuBusy = true;
+  mind._lastThink = 0;
+  await mind.tick();
+  assert.equal(store.thoughts.items.length, before);
+  mind.gpuBusy = false;
+  mind._lastThink = 0;
+  await mind.tick();
+  assert.ok(store.thoughts.items.length > before);
+});

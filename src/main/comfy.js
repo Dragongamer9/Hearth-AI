@@ -23,6 +23,10 @@ const ROSTER = {
   Tinkerer: { hair: 'Pink, messy bun', eyes: 'Violet', outfit: 'Work apron with tools, goggles on head' }
 };
 const NEG = 'lowres, bad anatomy, bad hands, text, watermark, signature, blurry, deformed, extra fingers, nsfw, nude';
+// Her face set: the base portrait first, then every expression made from it so she stays the same person.
+const FACE_DENOISE = { blink: 0.32, talking: 0.32 };
+const EXPR_DENOISE = 0.48;
+const NEG_FRAME = ', close-up, cropped head, cut off head, head out of frame, face cut off, extreme close-up';
 
 class Comfy {
   constructor(getSettings) { this.getSettings = getSettings; this.busy = false; }
@@ -49,8 +53,29 @@ class Comfy {
     if (!pick) throw new Error('ComfyUI has no image checkpoints. Pick one in Settings.');
     return pick;
   }
+  // Upload an image so ComfyUI can start from it (img2img).
+  async upload(file) {
+    const form = new FormData();
+    form.append('image', new Blob([fs.readFileSync(file)], { type: 'image/png' }), 'hearth-ai-' + Date.now() + '-' + path.basename(file));
+    form.append('overwrite', 'true');
+    const r = await fetch(this.url + '/upload/image', { method: 'POST', body: form });
+    if (!r.ok) throw new Error('ComfyUI wouldn\u2019t take the base portrait (' + r.status + ')');
+    return (await r.json()).name;
+  }
   workflow(ckpt, prompt, o) {
     const w = o.width || 832, h = o.height || 1216;
+    if (o.initImage) {
+      return {
+        '4': { class_type: 'CheckpointLoaderSimple', inputs: { ckpt_name: ckpt } },
+        '10': { class_type: 'LoadImage', inputs: { image: o.initImage } },
+        '11': { class_type: 'VAEEncode', inputs: { pixels: ['10', 0], vae: ['4', 2] } },
+        '6': { class_type: 'CLIPTextEncode', inputs: { text: prompt, clip: ['4', 1] } },
+        '7': { class_type: 'CLIPTextEncode', inputs: { text: o.negative || NEG, clip: ['4', 1] } },
+        '3': { class_type: 'KSampler', inputs: { seed: o.seed == null ? Math.floor(Math.random() * 1e12) : o.seed, steps: o.steps || 28, cfg: 6.5, sampler_name: 'euler_ancestral', scheduler: 'normal', denoise: o.denoise || 0.5, model: ['4', 0], positive: ['6', 0], negative: ['7', 0], latent_image: ['11', 0] } },
+        '8': { class_type: 'VAEDecode', inputs: { samples: ['3', 0], vae: ['4', 2] } },
+        '9': { class_type: 'SaveImage', inputs: { filename_prefix: 'hearth-ai', images: ['8', 0] } }
+      };
+    }
     return {
       '4': { class_type: 'CheckpointLoaderSimple', inputs: { ckpt_name: ckpt } },
       '5': { class_type: 'EmptyLatentImage', inputs: { width: w, height: h, batch_size: 1 } },
@@ -97,7 +122,7 @@ class Comfy {
   }
   avatarPrompt(av, expr, night) {
     const outfit = night && av.nightOutfit && av.nightOutfit !== 'Same as day' ? av.nightOutfit : av.outfit;
-    return ['masterpiece, best quality', STYLE[av.style] || STYLE.Anime, '1girl, solo, upper body portrait, looking at viewer',
+    return ['masterpiece, best quality', STYLE[av.style] || STYLE.Anime, '1girl, solo, cowboy shot, zoomed out, whole head and hair fully in frame, space above head, face in upper third, centered, looking at viewer',
       'named Ithil, ' + av.hair + ' hair, ' + av.eyes + ' eyes, wearing ' + outfit,
       EXPR[expr] || EXPR.calm, 'moonlit night background, soft rim light, accent color ' + av.accent].join(', ');
   }
@@ -106,20 +131,39 @@ class Comfy {
     if (av.style === 'Moon orb') return [];
     this.busy = true;
     const seed = Math.floor(Math.random() * 1e12);
+    // Draw the whole new set in a side folder; the old face stays on screen
+    // until every new picture is ready, then they swap in one go.
+    const tmp = dir + '.new';
+    fs.rmSync(tmp, { recursive: true, force: true });
+    fs.mkdirSync(tmp, { recursive: true });
+    const keys = Object.keys(EXPR);
     const out = [];
     try {
-      fs.mkdirSync(dir, { recursive: true });
-      const keys = Object.keys(EXPR);
-      for (let i = 0; i < keys.length; i++) {
-        const k = keys[i];
-        if (onProgress) onProgress(i, keys.length, k);
-        const buf = await this.run(this.avatarPrompt(av, k), { seed, width: 832, height: 1216 });
-        const file = path.join(dir, k + '.png');
+      if (onProgress) onProgress(0, keys.length, 'calm');
+      const base = await this.run(this.avatarPrompt(av, 'calm'), { seed, width: 832, height: 1216, negative: NEG + NEG_FRAME });
+      const baseFile = path.join(tmp, 'calm.png');
+      fs.writeFileSync(baseFile, base);
+      out.push(baseFile);
+      const baseName = await this.upload(baseFile);
+      const rest = keys.filter((k) => k !== 'calm');
+      for (let i = 0; i < rest.length; i++) {
+        const k = rest[i];
+        if (onProgress) onProgress(i + 1, keys.length, k);
+        const buf = await this.run(this.avatarPrompt(av, k), { seed, initImage: baseName, denoise: FACE_DENOISE[k] || EXPR_DENOISE, negative: NEG + NEG_FRAME });
+        const file = path.join(tmp, k + '.png');
         fs.writeFileSync(file, buf);
         out.push(file);
       }
-      fs.writeFileSync(path.join(dir, 'look.json'), JSON.stringify({ av, seed, at: Date.now() }, null, 2));
-      return out;
+      fs.writeFileSync(path.join(tmp, 'look.json'), JSON.stringify({ av, seed, at: Date.now() }, null, 2));
+      const old = dir + '.old';
+      fs.rmSync(old, { recursive: true, force: true });
+      if (fs.existsSync(dir)) fs.renameSync(dir, old);
+      fs.renameSync(tmp, dir);
+      fs.rmSync(old, { recursive: true, force: true });
+      return out.map((f) => path.join(dir, path.basename(f)));
+    } catch (e) {
+      fs.rmSync(tmp, { recursive: true, force: true });
+      throw e;
     } finally { this.busy = false; }
   }
 }

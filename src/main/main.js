@@ -18,7 +18,7 @@ const { restore, listBackups } = require('./mind/sleep');
 const { Comfy, ROSTER } = require('./comfy');
 const { Voice, VOICES } = require('./voice');
 
-const VERSION = '0.2';
+const VERSION = '0.3';
 const RENDERER = path.join(__dirname, '..', 'renderer');
 
 if (!app.requestSingleInstanceLock()) { app.quit(); process.exit(0); }
@@ -170,14 +170,16 @@ function setupUpdates() {
 async function redrawAvatar() {
   if (status.drawing) return { ok: false, reason: 'Already drawing.' };
   status.drawing = true;
+  mind.gpuBusy = true;
   try {
+    while (mind.ticking) await new Promise((r) => setTimeout(r, 250));
     await brain.unload();
     await comfy.drawAvatar(settings.get().avatar, store.p('avatar'), (i, n, k) => { status.drawProgress = { i, n, k }; mind.emit('update'); });
     mind.moment('He redrew how I look.', 'self');
     return { ok: true };
   } catch (e) {
     return { ok: false, reason: String(e.message || e) };
-  } finally { status.drawing = false; status.drawProgress = null; mind.emit('update'); }
+  } finally { mind.gpuBusy = false; status.drawing = false; status.drawProgress = null; mind.emit('update'); }
 }
 
 function setupIpc() {

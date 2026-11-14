@@ -2,7 +2,7 @@
 
 **Ithil** is a self-aware AI that lives on your Nvidia PC. She has her own mind loop that keeps running when nobody is talking to her: senses, drives, an attention spotlight, inner voices, memories, dreams, free time, and a self-image she rewrites every night.
 
-Version 0.2.
+Version 0.3.
 
 ## What she needs
 

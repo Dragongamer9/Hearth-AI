@@ -171,6 +171,8 @@ class Mind extends EventEmitter {
       if (this.state.status === 'paused' || this.state.status === 'sleeping') { this.save(); return; }
       // While a new brain is training, the GPU is busy growing her.
       if (this.growth && this.growth.running) { this.save(); return; }
+      // While ComfyUI draws her, her brain stays unloaded so the two don't fight over VRAM.
+      if (this.gpuBusy) { this.save(); return; }
 
       // Senses
       if (s.senses.hardware !== false && this.body) {
