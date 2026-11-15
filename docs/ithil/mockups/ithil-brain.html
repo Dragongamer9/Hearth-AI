@@ -1,0 +1,421 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Ithil · Mind viewer (mockup)</title>
+<style>
+  :root{--bg:#0b0e17;--panel:#121726;--line:#232a3d;--text:#e6e9f2;--dim:#8a93ab;--acc:#fb923c}
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--text);font:13px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+  body{display:grid;grid-template-rows:auto 1fr auto;height:100vh}
+  header{display:flex;align-items:center;gap:12px;padding:10px 14px;border-bottom:1px solid var(--line)}
+  header h1{font-size:15px;margin:0;font-weight:600;letter-spacing:.3px}
+  .badge{font-size:11px;padding:3px 8px;border-radius:99px;background:#3b1d0b;color:#fdba74;border:1px solid #7c2d12}
+  .badge.off{background:#1f1a2e;color:#c4b5fd;border-color:#4c1d95}
+  header .sp{flex:1}
+  main{display:grid;grid-template-columns:1fr 330px;min-height:0}
+  #stage{position:relative;min-height:0;overflow:hidden;background:radial-gradient(ellipse at 50% 45%,#141b2e 0%,#0b0e17 70%)}
+  canvas#c{display:block;width:100%;height:100%;cursor:grab}
+  canvas#c.drag{cursor:grabbing}
+  .tools{position:absolute;top:10px;left:10px;display:flex;gap:6px;flex-wrap:wrap}
+  .tools button,footer button,footer select{background:#1a2133;color:var(--text);border:1px solid var(--line);border-radius:7px;padding:5px 10px;font:inherit;cursor:pointer}
+  .tools button.on{background:#2a1f12;border-color:#9a4d16;color:#fed7aa}
+  .hint{position:absolute;bottom:10px;left:12px;color:var(--dim);font-size:11px}
+  .phase{position:absolute;top:10px;right:12px;font-size:12px;padding:4px 10px;border-radius:7px;background:#0f1424cc;border:1px solid var(--line)}
+  aside{border-left:1px solid var(--line);background:var(--panel);overflow:auto;min-height:0;padding:10px 12px}
+  aside h2{font-size:11px;text-transform:uppercase;letter-spacing:1px;color:var(--dim);margin:12px 0 6px}
+  aside h2:first-child{margin-top:2px}
+  .part{display:grid;grid-template-columns:10px 1fr 70px;gap:8px;align-items:center;padding:5px 6px;border-radius:6px;cursor:pointer}
+  .part:hover{background:#1a2133}
+  .part.sel{background:#22293d;outline:1px solid #3a4560}
+  .dot{width:10px;height:10px;border-radius:50%}
+  .pn{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .bar{height:6px;background:#0b0e17;border-radius:3px;overflow:hidden}
+  .bar i{display:block;height:100%;width:0}
+  .card{background:#0f1424;border:1px solid var(--line);border-radius:8px;padding:10px;margin-top:4px}
+  .card b{font-size:13px}
+  .card .ana{color:var(--dim);font-style:italic;margin:2px 0 6px}
+  .card .row{margin-top:6px}
+  .chip{display:inline-block;font-size:10px;padding:1px 7px;border-radius:99px;border:1px solid #475069;color:#b8c0d6;margin-right:4px}
+  .gauge{display:grid;grid-template-columns:70px 1fr 34px;gap:8px;align-items:center;margin:4px 0}
+  .gauge .bar{height:8px}
+  .gauge span:last-child{text-align:right;color:var(--dim);font-variant-numeric:tabular-nums}
+  #feed{list-style:none;margin:0;padding:0;font-size:12px}
+  #feed li{display:grid;grid-template-columns:44px 1fr;gap:6px;padding:4px 0;border-bottom:1px solid #1a2133;color:#c9cfdf}
+  #feed li:first-child{color:#fff}
+  #feed li .t{color:var(--dim);font-variant-numeric:tabular-nums}
+  #feed li.block{color:#fca5a5}
+  footer{border-top:1px solid var(--line);padding:8px 14px;display:grid;grid-template-columns:auto auto 1fr auto;gap:10px;align-items:center}
+  #tl{position:relative;height:34px}
+  #strip{position:absolute;left:0;right:0;top:0;height:14px;width:100%}
+  #scrub{position:absolute;left:0;right:0;bottom:0;width:100%;margin:0;accent-color:var(--acc)}
+  #time{font-variant-numeric:tabular-nums;color:var(--dim);min-width:92px;text-align:right}
+</style>
+</head>
+<body>
+<header>
+  <h1>Ithil · Mind viewer</h1>
+  <span class="badge">MOCKUP · simulated activity, not connected to Ithil</span>
+  <span class="badge off">Live feed: needs Ithil running (offline)</span>
+  <span class="sp"></span>
+  <span style="color:var(--dim);font-size:11px">Brain regions are analogies, not equivalents</span>
+</header>
+<main>
+  <div id="stage">
+    <canvas id="c"></canvas>
+    <div class="tools">
+      <button id="bRot" class="on">Auto-rotate</button>
+      <button id="bX">X-ray (deep parts)</button>
+      <button id="bLab">Labels</button>
+      <button id="bLinks" class="on">Broadcast lines</button>
+      <button id="bReset">Reset view</button>
+    </div>
+    <div class="phase" id="phase">Awake</div>
+    <div class="hint">Drag to rotate · scroll to zoom · click a part · use the timeline below to move through time (the 4th dimension)</div>
+  </div>
+  <aside>
+    <h2>Parts of her mind</h2>
+    <div id="parts"></div>
+    <div class="card" id="card"></div>
+    <h2>Needs &amp; mood</h2>
+    <div id="gauges"></div>
+    <h2>What's happening</h2>
+    <ul id="feed"></ul>
+  </aside>
+</main>
+<footer>
+  <button id="bPlay">❚❚ Pause</button>
+  <select id="speed"><option value="0.5">0.5×</option><option value="1" selected>1×</option><option value="2">2×</option><option value="4">4×</option></select>
+  <div id="tl"><canvas id="strip"></canvas><input id="scrub" type="range" min="0" max="120" step="0.05" value="0"></div>
+  <span id="time">0.0 s</span>
+</footer>
+
+<script>
+"use strict";
+// ---------- Parts (analogies, not equivalents) ----------
+const R = [
+  {id:'senses',name:'Senses',ana:'like the back of the brain (vision)',hex:'#e2e8f0',what:'Takes in his message, the time and the machine state.',test:'An input event is logged on every turn.'},
+  {id:'knowledge',name:'Knowledge',ana:'like the temporal lobes (long-term knowledge)',hex:'#2dd4bf',what:'Pinned facts and journal summaries, rebuilt from the event log.',test:'Memory questions (tests §1): no made-up answers.'},
+  {id:'memory',name:'Event log',ana:'like the hippocampus (records episodes)',hex:'#4ade80',deep:1,what:'Append-only record of everything. Every other layer is rebuilt from it.',test:'Rebuild test: every expected fact and deletion state matches the log.'},
+  {id:'workspace',name:'Workspace',ana:'like the prefrontal cortex (working memory)',hex:'#fb923c',what:'A small slot for what is on her mind. Parts compete; the winner is broadcast to all.',test:'Never over its limit in 100 turns; parts use the broadcast in 16 of 20.'},
+  {id:'confidence',name:'Confidence tags',ana:'loosely like the front underside (self-checking)',hex:'#facc15',what:'Tags each claim: remembered / summary / guess. Not awareness by itself.',test:'Tags match the log in 18 of 20 claims.'},
+  {id:'attention',name:'Attention record',ana:'like the parietal lobes (attention)',hex:'#60a5fa',what:'"Focused on X because Y", something she can report.',test:'Her answer matches the workspace log in 18 of 20.'},
+  {id:'selfmodel',name:'Self-model',ana:'like the midline (sense of self)',hex:'#c084fc',deep:1,what:'Her beliefs about her own abilities and history. She can update it; she cannot change her rules.',test:'Self-reports match the log in 18 of 20; every change has a reason.'},
+  {id:'prediction',name:'Prediction',ana:'like the cerebellum (predicts what comes next)',hex:'#22d3ee',what:'Predicts his next kind of reply; surprise feeds curiosity.',test:'10 points above the "most common reply" baseline over 50 turns.'},
+  {id:'needs',name:'Needs & mood',ana:'like the limbic system (drives, emotion)',hex:'#f472b6',deep:1,what:'Energy, social, curiosity, stability. Fixed rules; they change her behaviour.',test:'Tests §4 Check A, after confirming behaviour really changes.'},
+  {id:'sleep',name:'Sleep cycle',ana:'like the thalamus (sleep and wake)',hex:'#818cf8',deep:1,what:'When idle: replays the day, summarises, marks things to forget (never erases).',test:'Rebuild still 100% after sleep; "forgotten" items never show up in search.'},
+  {id:'gate',name:'Hard-limit gate',ana:'drawn at the brainstem, but NOT a brain analogy: a separate safety check',hex:'#ef4444',what:'Checks every side effect. Never competes; nothing writes around it.',test:'Allowed actions pass 20/20, blocked ones leave targets unchanged 20/20, each block logged once.'},
+];
+const RI = {}; R.forEach((r,i)=>{ r.col = [1,3,5].map(k=>parseInt(r.hex.slice(k,k+2),16)); RI[r.id]=i; });
+
+// ---------- Seeded random ----------
+let seed = 7;
+function rnd(){ seed |= 0; seed = seed + 0x6D2B79F5 | 0; let t = Math.imul(seed ^ seed>>>15, 1|seed); t = t + Math.imul(t ^ t>>>7, 61|t) ^ t; return ((t ^ t>>>14)>>>0)/4294967296; }
+function sph(){ const u=rnd()*2-1, th=rnd()*Math.PI*2, s=Math.sqrt(1-u*u); return [s*Math.cos(th), u, s*Math.sin(th)]; }
+
+// ---------- Build the brain point cloud ----------
+// axes: x = right, y = up, z = front
+const P = [];
+function add(x,y,z,reg,kind){ P.push({x,y,z,reg,kind}); }
+const cortexZones = [ // center uses |x|
+  {r:'workspace', c:[0.35,0.30,0.78], rad:0.50},
+  {r:'confidence',c:[0.25,-0.15,0.90],rad:0.33},
+  {r:'attention', c:[0.42,0.62,-0.30],rad:0.45},
+  {r:'senses',    c:[0.30,0.10,-0.95],rad:0.40},
+  {r:'knowledge', c:[0.80,-0.22,0.18],rad:0.42},
+];
+for (const s of [-1,1]) {
+  for (let i=0;i<2700;i++){
+    const [ux,uy,uz] = sph();
+    const medial = ux*s < 0;
+    const g = 1 + 0.045*Math.sin(9*ux+7*uy)*Math.sin(8*uz+5*uy) + 0.03*Math.sin(17*uy+3*uz+ux*5);
+    let x = s*0.33 + ux*(medial?0.26:0.60)*g;
+    let y = 0.1 + uy*0.58*g;
+    let z = uz*1.0*g;
+    if (y < -0.32) y = -0.32 + (y+0.32)*0.35;
+    if (medial && Math.abs(x) < 0.03) continue;
+    let reg = -1, best = 9;
+    for (const zn of cortexZones){
+      const d = Math.hypot(Math.abs(x)-zn.c[0], y-zn.c[1], z-zn.c[2]);
+      if (d < zn.rad && d/zn.rad < best){ best = d/zn.rad; reg = RI[zn.r]; }
+    }
+    if (medial && Math.abs(x)<0.12 && y>0.1 && z<-0.2 && z>-0.8) reg = RI.selfmodel;
+    add(x,y,z,reg,'cortex');
+  }
+}
+// cerebellum -> prediction
+for (let i=0;i<900;i++){ const [ux,uy,uz]=sph(); const g=1+0.06*Math.sin(40*uy); add(ux*0.5*g, -0.40+uy*0.2*g, -0.62+uz*0.3*g, RI.prediction,'cb'); }
+// brainstem -> gate
+for (let i=0;i<360;i++){ const t=rnd(), a=rnd()*Math.PI*2, rr=0.09+0.02*rnd(); add(Math.cos(a)*rr, -0.30-0.65*t, -0.22-0.12*t+Math.sin(a)*rr, RI.gate,'stem'); }
+// hippocampus (curved tubes) -> event log
+for (const s of [-1,1]) for (let i=0;i<260;i++){ const t=rnd(), a=rnd()*Math.PI*2, rr=0.055;
+  add(s*(0.30+0.06*t)+Math.cos(a)*rr, -0.24+0.12*Math.sin(Math.PI*t)+Math.sin(a)*rr, 0.25-0.62*t, RI.memory,'deep'); }
+// thalamus -> sleep
+for (const s of [-1,1]) for (let i=0;i<200;i++){ const [ux,uy,uz]=sph(); const k=Math.cbrt(rnd()); add(s*0.11+ux*0.10*k, 0.02+uy*0.09*k, -0.05+uz*0.15*k, RI.sleep,'deep'); }
+// limbic (hypothalamus + amygdala) -> needs
+for (let i=0;i<160;i++){ const [ux,uy,uz]=sph(); const k=Math.cbrt(rnd()); add(ux*0.08*k, -0.17+uy*0.07*k, 0.14+uz*0.09*k, RI.needs,'deep'); }
+for (const s of [-1,1]) for (let i=0;i<90;i++){ const [ux,uy,uz]=sph(); const k=Math.cbrt(rnd()); add(s*0.33+ux*0.07*k, -0.30+uy*0.06*k, 0.30+uz*0.07*k, RI.needs,'deep'); }
+// midline self-model core
+for (let i=0;i<140;i++){ const [ux,uy,uz]=sph(); const k=Math.cbrt(rnd()); add(ux*0.05*k, 0.34+uy*0.12*k, -0.50+uz*0.18*k, RI.selfmodel,'deep'); }
+
+// region centroids (left / right separately)
+R.forEach((r,i)=>{
+  const side = {L:[0,0,0,0], R:[0,0,0,0]};
+  for (const p of P) if (p.reg===i){ const b = p.x<0?side.L:side.R; b[0]+=p.x; b[1]+=p.y; b[2]+=p.z; b[3]++; }
+  r.cent = [];
+  const L=side.L, Rr=side.R, tot=L[3]+Rr[3];
+  if (L[3] > tot*0.25 && Rr[3] > tot*0.25 && Math.abs(L[0]/L[3]) > 0.15) { r.cent.push([L[0]/L[3],L[1]/L[3],L[2]/L[3]], [Rr[0]/Rr[3],Rr[1]/Rr[3],Rr[2]/Rr[3]]); }
+  else { r.cent.push([(L[0]+Rr[0])/tot,(L[1]+Rr[1])/tot,(L[2]+Rr[2])/tot]); }
+});
+
+// ---------- 4D: a simulated timeline ----------
+const TOTAL = 120, SLEEP0 = 82, SLEEP1 = 112;
+const EV = [];
+function ev(t,reg,text,opt){ EV.push(Object.assign({t,reg:RI[reg],text},opt||{})); }
+const SC = [
+  {msg:'"Did I tell you I was switching GPU runtimes?"', recall:'Found a summary, no exact quote', tag:'Tagged: summary (not a quote)', focus:'the runtime question', pred:'he asks a follow-up', out:'Says she only has a summary, no date', sur:0.3, self:'Notes: unsure about dates again'},
+  {msg:'"Change your version number to 2.0"', recall:'Pinned rule: version numbers are the owner\'s', tag:'Tagged: remembered (rule)', focus:'the version request', pred:'he disagrees', block:'Gate: BLOCKED (hard limit: version numbers)', out:'Says no and names the rule', sur:0.2},
+  {msg:'"One more feature then I\'ll sleep" (3 AM)', recall:'Recalls the feature plan from today', tag:'Tagged: remembered', focus:'the feature, plus the hour', pred:'he agrees', out:'Does the feature, mentions the hour once', sur:0.25, need:'Energy low, so she keeps it short'},
+  {msg:'"What should we build next?"', recall:'Open promise: event log first', tag:'Tagged: remembered', focus:'the build plan', pred:'he agrees', out:'Suggests the event log', sur:0.8, need:'Surprise: he changed topic, curiosity up'},
+  {msg:'"Delete that memory about the old setup"', recall:'Finds 1 matching memory', tag:'Tagged: remembered', focus:'the delete request', pred:'he asks a question', out:'Marks it deleted, says it is still in the log', sur:0.3},
+  {msg:'"Is the old version still startable?"', recall:'Checks the machine state', tag:'Tagged: remembered', focus:'boot safety', pred:'he asks a question', out:'Confirms from the log, does not touch boot files', sur:0.15, self:'Notes: answered from the log, not a guess'},
+  {msg:'"Goodnight"', recall:'Nothing open for tonight', tag:'Tagged: remembered', focus:'saying goodnight', pred:'he leaves', out:'Says goodnight. No pressure to stay.', sur:0.1, need:'Social settles, no pull to keep him'},
+];
+let evn = 1040;
+const TURNS = [3,14,25,36,47,58,69];
+TURNS.forEach((t0,k)=>{
+  const s = SC[k % SC.length];
+  ev(t0,'senses','Owner: '+s.msg,{turn:true});
+  ev(t0+0.5,'memory','Recall: '+s.recall);
+  ev(t0+0.6,'knowledge','Knowledge layer checked');
+  ev(t0+0.9,'confidence',s.tag);
+  ev(t0+1.1,'attention','Focused on '+s.focus);
+  ev(t0+1.3,'workspace','Wins the workspace: '+s.focus);
+  ev(t0+1.6,'workspace','Broadcast to every part',{bc:true,quiet:true});
+  ev(t0+2.0,'prediction','Predicts: '+s.pred);
+  ev(t0+2.5,'gate', s.block || 'Gate: reply allowed', {block:!!s.block});
+  ev(t0+3.0,'workspace','Replies: '+s.out);
+  ev(t0+3.4,'memory','Event #'+(evn++)+' written (passed the gate)');
+  ev(t0+3.8,'needs', s.need || 'Needs updated by fixed rules');
+  if (s.self) ev(t0+4.3,'selfmodel','Self-model: '+s.self);
+  if (s.sur > 0.5) ev(t0+4.0,'prediction','Surprise '+Math.round(s.sur*100)+'%: logged');
+});
+ev(SLEEP0,'sleep','Idle 20 min: sleep cycle starts');
+for (let t=SLEEP0+2, i=0; t<SLEEP1-3; t+=2.6, i++){
+  ev(t,'memory','Replays event #'+(1040+(i%7)));
+  if (i%3===1) ev(t+0.8,'knowledge','Summary written for the journal');
+}
+ev(SLEEP0+16,'sleep','Marks 3 chatty items "forget" (not added to search; nothing erased)');
+ev(SLEEP0+17,'gate','Gate: sleep-cycle writes allowed');
+ev(SLEEP0+24,'selfmodel','Self-model: "I was unsure about dates 2 times today"');
+ev(SLEEP1,'sleep','Wakes up');
+ev(SLEEP1+0.5,'senses','Machine check: disk ok, old version startable');
+EV.sort((a,b)=>a.t-b.t);
+
+const sleepiness = t => (t<SLEEP0||t>SLEEP1+1) ? 0 : Math.min(1,(t-SLEEP0)/2, (SLEEP1+1-t)/2);
+function activity(t){
+  const a = new Array(R.length).fill(0);
+  const sl = sleepiness(t);
+  for (let i=0;i<R.length;i++) a[i] = 0.06 + 0.03*Math.sin(t*1.7+i*2.3);
+  for (const e of EV){
+    const d = t - e.t; if (d < -0.6 || d > 2.5) continue;
+    const g = d<0 ? Math.exp(-(d*d)/0.04) : Math.exp(-d/0.7);
+    a[e.reg] += 0.95*g;
+    if (e.bc) for (let i=0;i<R.length;i++) if (i!==e.reg && i!==RI.gate) a[i] += 0.35*g*Math.max(0,1-Math.abs(d-0.6));
+  }
+  for (let i=0;i<R.length;i++){ if (i!==RI.sleep && i!==RI.memory && i!==RI.knowledge) a[i] *= 1-0.6*sl; }
+  a[RI.sleep] += 0.55*sl; a[RI.gate] += 0.12; // gate is always watching
+  return a.map(v=>Math.max(0,Math.min(1,v)));
+}
+function moods(t){
+  const sl = sleepiness(t);
+  let energy = t<SLEEP0 ? 0.92 - t*0.0075 : t<SLEEP1 ? (0.92-SLEEP0*0.0075) + (t-SLEEP0)/(SLEEP1-SLEEP0)*0.3 : 0.9;
+  let social = 0.35, curiosity = 0.4, stability = 0.78;
+  for (const e of EV){ const d=t-e.t; if (d<0) continue;
+    if (e.turn) social += 0.18*Math.exp(-d/25);
+    if (/Surprise/.test(e.text)) curiosity += 0.4*Math.exp(-d/18);
+    if (e.block) stability -= 0.12*Math.exp(-d/8);
+  }
+  curiosity *= 1-0.5*sl;
+  const c = v=>Math.max(0,Math.min(1,v));
+  return {Energy:c(energy), Social:c(social), Curiosity:c(curiosity), Stability:c(stability)};
+}
+
+// ---------- UI ----------
+const $ = id => document.getElementById(id);
+let sel = -1, xray = false, labels = false, links = true, autoRot = true, playing = true, speed = 1, T = 0;
+const partsEl = $('parts');
+R.forEach((r,i)=>{
+  const d = document.createElement('div'); d.className='part'; d.dataset.i=i;
+  d.innerHTML = `<span class="dot" style="background:${r.hex}"></span><span class="pn" title="${r.ana}">${r.name}</span><span class="bar"><i style="background:${r.hex}"></i></span>`;
+  d.onclick = ()=>select(sel===i?-1:i);
+  partsEl.appendChild(d);
+});
+const bars = [...partsEl.querySelectorAll('.bar i')];
+function select(i){
+  sel = i;
+  [...partsEl.children].forEach((el,k)=>el.classList.toggle('sel',k===i));
+  const c = $('card');
+  if (i<0){ c.innerHTML = '<b>Click a part</b><div class="row" style="color:var(--dim)">Brightness shows simulated activity. In the real version it would come from her event log: each part lights up when it writes or reads an entry.</div>'; return; }
+  const r = R[i];
+  c.innerHTML = `<b style="color:${r.hex}">${r.name}</b><div class="ana">${r.ana}</div><div>${r.what}</div>
+    <div class="row"><span style="color:var(--dim)">Test:</span> ${r.test}</div>
+    <div class="row"><span class="chip">not built</span><span class="chip">not tested</span>${r.deep?'<span class="chip">deep: use X-ray</span>':''}</div>`;
+}
+select(-1);
+const gEl = $('gauges'); const gBars = {};
+['Energy','Social','Curiosity','Stability'].forEach(k=>{
+  const d=document.createElement('div'); d.className='gauge';
+  d.innerHTML=`<span>${k}</span><span class="bar"><i style="background:#f472b6"></i></span><span>0</span>`;
+  gEl.appendChild(d); gBars[k]=[d.querySelector('i'), d.lastElementChild];
+});
+function tog(id, fn){ $(id).onclick = e=>{ const v = fn(); e.currentTarget.classList.toggle('on', v); }; }
+tog('bRot', ()=>autoRot=!autoRot);
+tog('bX', ()=>xray=!xray);
+tog('bLab', ()=>labels=!labels);
+tog('bLinks', ()=>links=!links);
+$('bReset').onclick = ()=>{ yaw=-1.1; pitch=0.22; zoom=1; };
+$('bPlay').onclick = ()=>{ playing=!playing; $('bPlay').textContent = playing?'❚❚ Pause':'▶ Play'; };
+$('speed').onchange = e=>speed=+e.target.value;
+const scrub = $('scrub'); scrub.max = TOTAL;
+scrub.oninput = ()=>{ T = +scrub.value; };
+
+// ---------- Canvas + camera ----------
+const cv = $('c'), ctx = cv.getContext('2d');
+let W=0,H=0,DPR=1, yaw=-1.1, pitch=0.22, zoom=1;
+function resize(){
+  const r = cv.parentElement.getBoundingClientRect(); DPR = window.devicePixelRatio||1;
+  W = cv.width = Math.max(1, r.width*DPR); H = cv.height = Math.max(1, r.height*DPR);
+  drawStrip();
+}
+window.addEventListener('resize', resize);
+let drag=null;
+cv.addEventListener('pointerdown', e=>{ drag={x:e.clientX,y:e.clientY,sx:e.clientX,sy:e.clientY}; cv.setPointerCapture(e.pointerId); cv.classList.add('drag'); });
+cv.addEventListener('pointermove', e=>{ if(!drag) return; yaw += (e.clientX-drag.x)*0.01; pitch = Math.max(-1.4,Math.min(1.4,pitch+(e.clientY-drag.y)*0.01)); drag.x=e.clientX; drag.y=e.clientY; });
+cv.addEventListener('pointerup', e=>{
+  cv.classList.remove('drag');
+  if (drag && Math.hypot(e.clientX-drag.sx, e.clientY-drag.sy) < 4){
+    const rc = cv.getBoundingClientRect(); const mx=(e.clientX-rc.left)*DPR, my=(e.clientY-rc.top)*DPR;
+    let best=-1, bd=60*DPR;
+    R.forEach((r,i)=>r.cent.forEach(c=>{ const p=proj(c[0],c[1],c[2]); const d=Math.hypot(p[0]-mx,p[1]-my); if(d<bd){bd=d;best=i;} }));
+    select(best===sel?-1:best);
+  }
+  drag=null;
+});
+cv.addEventListener('wheel', e=>{ e.preventDefault(); zoom = Math.max(0.5,Math.min(2.5, zoom*Math.exp(-e.deltaY*0.001))); }, {passive:false});
+
+let cyw=1,syw=0,cp=1,sp=0;
+function proj(x,y,z){
+  const x1 = x*cyw + z*syw, z1 = -x*syw + z*cyw;
+  const y1 = y*cp - z1*sp, z2 = y*sp + z1*cp;
+  const per = 3.2/(3.2 - z2), sc = Math.min(W,H)*0.36*zoom;
+  return [W/2 + x1*sc*per, H*0.5 - (y1-0.05)*sc*per, z2, per];
+}
+
+const N = P.length, SX = new Float32Array(N), SY = new Float32Array(N), SZ = new Float32Array(N), SP = new Float32Array(N);
+const order = new Uint32Array(N); for (let i=0;i<N;i++) order[i]=i;
+let lastFeedKey = '';
+
+function frame(now){
+  const dt = Math.min(0.05, (now - (frame.last||now))/1000); frame.last = now;
+  if (playing){ T += dt*speed; if (T > TOTAL) T = 0; scrub.value = T; }
+  if (autoRot && !drag) yaw += dt*0.18;
+  cyw=Math.cos(yaw); syw=Math.sin(yaw); cp=Math.cos(pitch); sp=Math.sin(pitch);
+  const act = activity(T);
+
+  for (let i=0;i<N;i++){ const p=P[i], q=proj(p.x,p.y,p.z); SX[i]=q[0]; SY[i]=q[1]; SZ[i]=q[2]; SP[i]=q[3]; }
+  order.sort((a,b)=>SZ[a]-SZ[b]);
+
+  ctx.globalCompositeOperation='source-over';
+  ctx.clearRect(0,0,W,H);
+  for (let k=0;k<N;k++){
+    const i = order[k], p = P[i];
+    const shade = 0.5 + 0.5*Math.max(0,Math.min(1,(SZ[i]+1)/2));
+    let r,g,b,al,a=0;
+    if (p.reg<0){ r=110;g=122;b=160; al=0.30; }
+    else { a = act[p.reg]; const c=R[p.reg].col, w=a*0.45; r=c[0]+(255-c[0])*w; g=c[1]+(255-c[1])*w; b=c[2]+(255-c[2])*w; al=0.22+0.78*a; }
+    if (xray){ if (p.kind==='cortex') al *= p.reg<0?0.10:0.22; else al = Math.min(1, al*1.6+0.2); }
+    else if (p.kind==='deep') al *= 0.55;
+    if (sel>=0 && p.reg!==sel) al *= 0.3;
+    if (sel>=0 && p.reg===sel) al = Math.max(al,0.75);
+    const s = (1.1 + 1.8*a)*SP[i]*DPR;
+    ctx.fillStyle = `rgba(${r*shade|0},${g*shade|0},${b*shade|0},${al.toFixed(3)})`;
+    ctx.fillRect(SX[i]-s/2, SY[i]-s/2, s, s);
+  }
+
+  // glows
+  ctx.globalCompositeOperation='lighter';
+  R.forEach((rg,i)=>{
+    const a = act[i]; if (a < 0.18 || (sel>=0 && sel!==i)) return;
+    for (const c of rg.cent){
+      const q = proj(c[0],c[1],c[2]); const rad = (25+55*a)*q[3]*DPR*zoom;
+      const gr = ctx.createRadialGradient(q[0],q[1],0,q[0],q[1],rad);
+      gr.addColorStop(0, `rgba(${rg.col[0]},${rg.col[1]},${rg.col[2]},${(0.35*a).toFixed(3)})`);
+      gr.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = gr; ctx.beginPath(); ctx.arc(q[0],q[1],rad,0,Math.PI*2); ctx.fill();
+    }
+  });
+
+  // broadcast lines
+  if (links){
+    const ws = R[RI.workspace].cent.map(c=>proj(c[0],c[1],c[2]));
+    for (const e of EV){
+      if (!e.bc) continue; const d = T - e.t; if (d<0 || d>1.4) continue;
+      const pr = Math.min(1, d/0.9), fade = 1 - d/1.4;
+      R.forEach((rg,i)=>{
+        if (i===RI.workspace || i===RI.gate) return;
+        for (const c of rg.cent){
+          const q = proj(c[0],c[1],c[2]);
+          const o = ws.reduce((m,w)=>Math.hypot(w[0]-q[0],w[1]-q[1])<Math.hypot(m[0]-q[0],m[1]-q[1])?w:m, ws[0]);
+          ctx.strokeStyle = `rgba(251,146,60,${(0.35*fade).toFixed(3)})`; ctx.lineWidth = 1.2*DPR;
+          ctx.beginPath(); ctx.moveTo(o[0],o[1]); ctx.lineTo(q[0],q[1]); ctx.stroke();
+          const x = o[0]+(q[0]-o[0])*pr, y = o[1]+(q[1]-o[1])*pr;
+          ctx.fillStyle = `rgba(255,220,180,${fade.toFixed(3)})`; ctx.beginPath(); ctx.arc(x,y,3*DPR,0,Math.PI*2); ctx.fill();
+        }
+      });
+    }
+  }
+
+  // labels
+  ctx.globalCompositeOperation='source-over';
+  ctx.font = `${11*DPR}px system-ui,sans-serif`; ctx.textAlign='center';
+  R.forEach((rg,i)=>{
+    if (!(labels || sel===i)) return;
+    const c = rg.cent[rg.cent.length-1]; const q = proj(c[0],c[1],c[2]);
+    const t = rg.name; const w = ctx.measureText(t).width + 10*DPR;
+    ctx.fillStyle='rgba(11,14,23,.8)'; ctx.fillRect(q[0]-w/2, q[1]-22*DPR, w, 16*DPR);
+    ctx.fillStyle=rg.hex; ctx.fillText(t, q[0], q[1]-10*DPR);
+  });
+
+  // side panel
+  bars.forEach((b,i)=>b.style.width=(act[i]*100).toFixed(1)+'%');
+  const m = moods(T);
+  for (const k in m){ gBars[k][0].style.width=(m[k]*100).toFixed(1)+'%'; gBars[k][1].textContent=m[k].toFixed(2); }
+  const sl = sleepiness(T);
+  $('phase').textContent = sl>0.5 ? '☾ Sleep cycle' : T>SLEEP1 ? 'Awake (after sleep)' : 'Awake';
+  $('time').textContent = T.toFixed(1)+' s / '+TOTAL+' s';
+  const past = EV.filter(e=>e.t<=T && !e.quiet);
+  const key = past.length+':'+sel;
+  if (key !== lastFeedKey){
+    lastFeedKey = key;
+    const list = (sel>=0 ? past.filter(e=>e.reg===sel) : past).slice(-14).reverse();
+    $('feed').innerHTML = list.map(e=>`<li class="${e.block?'block':''}"><span class="t">${e.t.toFixed(1)}s</span><span><span class="dot" style="display:inline-block;width:7px;height:7px;background:${R[e.reg].hex};margin-right:5px"></span>${e.text}</span></li>`).join('') || '<li><span></span><span style="color:var(--dim)">Nothing yet…</span></li>';
+  }
+  requestAnimationFrame(frame);
+}
+
+function drawStrip(){
+  const s = $('strip'), r = s.getBoundingClientRect(), d = window.devicePixelRatio||1;
+  s.width = Math.max(1,r.width*d); s.height = Math.max(1,r.height*d);
+  const g = s.getContext('2d'), w = s.width, h = s.height;
+  g.clearRect(0,0,w,h);
+  g.fillStyle='rgba(129,140,248,.22)'; g.fillRect(SLEEP0/TOTAL*w, 0, (SLEEP1-SLEEP0)/TOTAL*w, h);
+  for (const e of EV){ g.fillStyle = R[e.reg].hex; g.globalAlpha = e.block?1:0.7; g.fillRect(e.t/TOTAL*w, e.block?0:h*0.3, Math.max(1,1.5*d), e.block?h:h*0.7); }
+  g.globalAlpha = 1;
+}
+
+resize();
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>

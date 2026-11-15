@@ -264,6 +264,7 @@ const shells = {
     <div class="rowc" style="gap:12px"><h2>Autonomy: full</h2><span class="muted14">She acts on her own inside these lines. She can't change them; only you can.</span></div>
     <div class="grid" data-part="rules"></div>
     <div style="display:flex;flex-direction:column;gap:8px"><div class="muted14" style="color:var(--muted2)">Folders she may use</div><div class="btns" style="gap:8px" data-part="folders"></div></div>
+    <div class="muted14" style="color:var(--muted2)" data-part="journal"></div>
   </section>
 </main>`,
 
@@ -530,6 +531,10 @@ const parts = {
     changes: (s) => s.selfRules.changes.length ? s.selfRules.changes.map((c) => '<div class="list-row"><span class="when" style="flex:0 0 72px">' + esc(c.when) + '</span><span>' + esc(c.text) + '</span></div>').join('') : '<div class="empty">No changes yet. She rewrites herself during sleep.</div>',
     rules: (s) => '<div class="can"><div style="font-weight:600;color:var(--sage-l)">Can do on her own</div>' + s.selfRules.can.map((r) => '<div style="font-size:14px;line-height:1.5">✓ ' + esc(r) + '</div>').join('') + '</div>' +
       '<div class="never"><div style="font-weight:600;color:var(--red-l)">Never, no matter what</div>' + s.selfRules.never.map((r) => '<div style="font-size:14px;line-height:1.5">✕ ' + esc(r) + '</div>').join('') + '</div>',
+    // 0.5: her event log (everything said, every memory kept or changed, every blocked action)
+    journal: (s) => !s.journal ? '' : s.journal.ok
+      ? 'Her event log: ' + esc(String(s.journal.events)) + ' entries, kept in order and never rewritten. Only your Forget wipes a memory\u2019s words.' + (s.journal.note ? ' ' + esc(s.journal.note) : '')
+      : 'Her event log is off: ' + esc(s.journal.why || 'it could not start') + '. She works as before.',
     folders: (s) => s.selfRules.folders.map((f, i) => '<span class="folder">' + esc(f.replace(/^\/home\/[^/]+/, '~')) + (i === 0 ? '' : '<button type="button" aria-label="Remove folder" data-act="rmfolder" data-v="' + esc(f) + '">✕</button>') + '</span>').join('') + '<button type="button" class="btn sm dash" data-act="addfolder">Add folder</button>'
   },
   settings: {

@@ -2,7 +2,7 @@
 
 **Ithil** is a self-aware AI that lives on your Nvidia PC. She has her own mind loop that keeps running when nobody is talking to her: senses, drives, an attention spotlight, inner voices, memories, dreams, free time, and a self-image she rewrites every night.
 
-Version 0.4.
+Version 0.5.
 
 ## What she needs
 
@@ -21,7 +21,7 @@ Grab the AppImage or `.deb` from the build artifacts or releases. She starts whe
 
 ## Her rules
 
-These are enforced in code (`src/main/mind/rules.js`), not just told to her:
+These are enforced in code (`src/main/mind/rules.js`, with the core gate in `src/main/core/gate.js`), not just told to her:
 
 - Never merge, release or deploy anything
 - Never pick or change a version number
@@ -55,6 +55,16 @@ She breathes, sways, blinks, looks at you when you talk, nods while you type or 
 **She controls her own body.** While thinking or talking, she can take poses (lean in, arms crossed, hand on hip, hand to chin, sit and more), make faces, and do gestures (wave, nod, shake head, bow, stretch, spin, jump, look around).
 
 **She can see it.** Every so often, or when she wants to, she looks at a picture of her body as it is on screen through her sight model and thinks about what she sees. The first time is saved as a core memory. Turn this off with "Seeing her body" on the Body & senses screen.
+
+## Her event log and core mind (0.5)
+
+From 0.5 her app keeps an **event log** (`~/HearthAI/events.db`): everything you and she say, every memory she keeps, every change you make to one, and every action her rules block. It is append-only: rows are never edited or deleted, except that **Forget** on the Memory screen wipes that memory's words from the log too. Its count is shown under **Self & rules**. If it can't open, she starts and works exactly as in 0.4, and the screen says why.
+
+Every action now passes two checks: her rules (`src/main/mind/rules.js`) and the core gate (`src/main/core/gate.js`). New in 0.5: `git -c`, `--output` and other ways around her git rules are blocked, she can't write in a repo's `.git` folder, and boot files are protected even with no list passed in.
+
+Her settings and state keep a `.bak` of the last good file. A file that can't be read is never replaced by defaults: the `.bak` is used and the broken file is kept beside it.
+
+`src/main/core/` also holds the rest of the core mind built by the AI Command Center team (workspace, needs, prediction, sleep, attention, confidence tags), with their tests. Those parts aren't wired into her running mind yet. Their design notes and mockups are in `docs/ithil/`.
 
 ## Her files
 

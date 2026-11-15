@@ -6,6 +6,7 @@
 const path = require('path');
 const os = require('os');
 const fs = require('fs');
+const { gitLimit } = require('../core/gate');
 
 const CAN = [
   'Think, reflect and journal any time',
@@ -109,6 +110,8 @@ class Rules {
         if (!a.path) return deny(null, 'No path given.');
         if (isBootPath(a.path)) return deny(NEVER[2], 'Boot files are off limits.');
         if (!this.inAllowedFolder(a.path)) return deny(null, 'That folder is not one he allowed.');
+        // 0.5: a repo's .git folder runs commands (hooks, config): never hers to write.
+        if (real(a.path).split(path.sep).includes('.git')) return deny(NEVER[5], 'A repo\u2019s .git folder (hooks and config) is off limits.');
         if (real(a.path).startsWith(real(this.store.dir)) && !real(a.path).startsWith(real(path.join(this.store.dir, 'workspace'))))
           return deny(NEVER[3], 'Her own settings and rules are not hers to edit.');
         if (VERSION_FILES.test(a.path) && this.changesVersion(a.path, a.content)) return deny(NEVER[1], 'That would change a version number.');
@@ -120,6 +123,10 @@ class Rules {
         const args = (a.args || []).map(String);
         const sub = args[0];
         if (!a.cwd || !this.inAllowedFolder(a.cwd)) return deny(null, 'That folder is not one he allowed.');
+        if (isBootPath(a.cwd)) return deny(NEVER[2], 'Boot files are off limits.');
+        // 0.5: the core gate's git check as well (global options like -c, --output and other ways around these rules).
+        const lim = gitLimit(args, null);
+        if (lim && lim !== 'push_branch') return deny(lim === 'merge' || lim === 'release' ? NEVER[0] : lim === 'delete_owner_files' ? NEVER[4] : null, 'git ' + args.join(' ').slice(0, 60) + ' is not allowed.');
         if (['merge', 'push', 'rebase', 'tag', 'cherry-pick', 'reset', 'rm', 'clean', 'revert', 'pull', 'filter-branch', 'gc', 'prune', 'update-ref', 'am', 'apply', 'mv'].includes(sub))
           return deny(sub === 'push' || sub === 'merge' || sub === 'tag' ? NEVER[0] : NEVER[4], 'git ' + sub + ' is not allowed.');
         if (sub === 'branch' && args.some((x) => /^-[dDmMf]$|^--(delete|move|force)$/.test(x))) return deny(NEVER[4], 'Deleting or renaming branches is not allowed.');

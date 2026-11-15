@@ -17,6 +17,10 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm test
+      - name: Her event log works inside Electron (node:sqlite)
+        run: |
+          ELECTRON_RUN_AS_NODE=1 npx electron -e "const { DatabaseSync } = require('node:sqlite'); const d = new DatabaseSync(':memory:'); d.exec('CREATE TABLE t (x); INSERT INTO t VALUES (1)'); if (d.prepare('SELECT x FROM t').get().x !== 1) process.exit(1); console.log('node:sqlite works in Electron, Node', process.versions.node)" \
+            || { echo "::error::node:sqlite is not available in this Electron: her event log would stay off"; exit 1; }
       - run: npm run bundle
       - name: Build AppImage and .deb
         run: npx electron-builder --linux AppImage deb --publish never

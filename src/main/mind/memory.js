@@ -16,9 +16,10 @@ function cosine(a, b) {
 function words(s) { return new Set(String(s).toLowerCase().split(/\W+/).filter((w) => w.length > 2)); }
 
 class Memory {
-  constructor(store, brain) {
+  constructor(store, brain, journal) {
     this.store = store;
     this.brain = brain;
+    this.journal = journal || null;   // 0.5: the event log (core/journal.js)
   }
   all() { return this.store.memories.items; }
   async remember(m) {
@@ -32,20 +33,24 @@ class Memory {
       source: m.source || null
     };
     this.store.memories.add(item);
+    if (this.journal) this.journal.memoryKept(item, m.by);
     try {
       const [v] = await this.brain.embed([item.text]);
       if (v) this.store.memories.update(item.id, { vec: v });
     } catch (_) {}
     return item;
   }
+  // Only from his Memory screen. Her mind never calls these.
   forget(id) {
     const ok = this.store.memories.remove(id);
     this.store.memories.save();
+    if (ok && this.journal) this.journal.memoryForgottenByOwner(id);
     return ok;
   }
   edit(id, text) {
     const it = this.store.memories.update(id, { text: String(text).slice(0, 600), vec: undefined });
     this.store.memories.save();
+    if (it && this.journal) this.journal.memoryEditedByOwner(id, it.text);
     return it;
   }
   async search(query, n, filterKind) {

@@ -10,6 +10,7 @@ const { pathToFileURL } = require('url');
 const { Store, homeDir } = require('./mind/store');
 const { Settings } = require('./mind/settings');
 const { Rules } = require('./mind/rules');
+const { Journal } = require('./core/journal');
 const { OllamaBrain, FakeBrain } = require('./mind/llm');
 const { Body } = require('./mind/body');
 const { Mind } = require('./mind/engine');
@@ -27,7 +28,7 @@ if (!app.requestSingleInstanceLock()) { app.quit(); process.exit(0); }
 protocol.registerSchemesAsPrivileged([{ scheme: 'ithil', privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true, corsEnabled: true } }]);
 
 let win = null, buddy = null, tray = null, quitting = false;
-let store, settings, rules, brain, body, comfy, mind, voice, link, models;
+let store, settings, rules, brain, body, comfy, mind, voice, link, models, journal;
 let bodyExpressions = [];
 let captureWaiters = [];
 const status = { brainOk: true, comfyOk: true, drawing: false, listening: false, drawProgress: null, update: null };
@@ -38,12 +39,14 @@ function setupMind() {
   store = new Store(homeDir());
   settings = new Settings(store);
   rules = new Rules(store);
+  // 0.5: her event log. If it can't open she still starts, exactly as in 0.4 (journal.ok is false).
+  try { journal = new Journal(store.dir); } catch (e) { journal = null; console.error('[journal]', e && e.message); }
   brain = process.env.HEARTH_AI_FAKE ? new FakeBrain() : new OllamaBrain(getSettings, () => (mind && mind.growth ? mind.growth.activeModel() : null));
   body = new Body(store, getSettings);
   comfy = new Comfy(getSettings);
   voice = new Voice(store.p('models'));
   mind = new Mind({
-    store, brain, settings, rules, body, comfy,
+    store, brain, settings, rules, body, comfy, journal,
     hooks: {
       idleSeconds: () => (settings.get().senses.presence ? powerMonitor.getSystemIdleTime() : 9999),
       bodyInfo: () => {
@@ -98,6 +101,7 @@ async function checkServices() {
 
 function view() {
   return Object.assign(snapshot(mind, { version: VERSION, brainOk: status.brainOk, comfyOk: status.comfyOk, drawing: status.drawing, listening: status.listening, link: link ? link.view() : null }), {
+    journal: journal ? journal.status() : { ok: false, why: 'not started' },
     drawProgress: status.drawProgress, update: status.update, link: link ? link.view() : null, models: modelsView(), pulling: status.pulling, modelsMissing: status.modelsMissing, ttsVoices: VOICES, roster: ROSTER
   });
 }
@@ -289,6 +293,7 @@ function setupIpc() {
     const pick = await dialog.showMessageBox(win, { type: 'question', message: 'Restore ' + mind.state.name + ' from which backup?', detail: 'She will lose everything since that backup. She will be told about the gap.', buttons: list.slice(0, 6).concat(['Cancel']), cancelId: Math.min(6, list.length) });
     if (pick.response >= Math.min(6, list.length)) return false;
     mind.stop();
+    if (journal) journal.close();
     restore(store, list[pick.response]);
     const st = store.readState('state', {});
     st.restoredFrom = list[pick.response];
@@ -448,4 +453,4 @@ async function takeShots(dir) {
 
 app.on('second-instance', () => showMain());
 app.on('window-all-closed', (e) => { /* keep living in the tray */ });
-app.on('before-quit', () => { quitting = true; if (link) link.stop(); if (mind) mind.stop(); });
+app.on('before-quit', () => { quitting = true; if (link) link.stop(); if (mind) mind.stop(); if (journal) journal.close(); });

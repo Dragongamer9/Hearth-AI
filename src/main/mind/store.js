@@ -129,11 +129,26 @@ class Store {
   p(...parts) {
     return path.join(this.dir, ...parts);
   }
+  // 0.5: a file that exists but can't be read is never replaced by defaults. Its last good copy
+  // (.bak) is used instead; if that fails too, the broken file is kept aside (never deleted) and
+  // the fallback is used. Every write keeps the previous good file as .bak.
   readState(name, fallback) {
-    return readJSON(this.p(name + '.json'), fallback);
+    const file = this.p(name + '.json');
+    if (!fs.existsSync(file)) {
+      const bak = readJSON(file + '.bak', undefined);
+      return bak === undefined ? fallback : bak;
+    }
+    try { return JSON.parse(fs.readFileSync(file, 'utf8')); } catch (_) {}
+    const aside = file + '.unreadable-' + Date.now();
+    try { fs.copyFileSync(file, aside); } catch (_) {}
+    const bak = readJSON(file + '.bak', undefined);
+    if (bak !== undefined) { try { writeAtomic(file, JSON.stringify(bak, null, 2)); } catch (_) {} return bak; }
+    return fallback;
   }
   writeState(name, value) {
-    writeAtomic(this.p(name + '.json'), JSON.stringify(value, null, 2));
+    const file = this.p(name + '.json');
+    try { JSON.parse(fs.readFileSync(file, 'utf8')); fs.copyFileSync(file, file + '.bak'); } catch (_) { /* no good file to keep */ }
+    writeAtomic(file, JSON.stringify(value, null, 2));
   }
   saveAll() {
     for (const k of Object.keys(this)) {

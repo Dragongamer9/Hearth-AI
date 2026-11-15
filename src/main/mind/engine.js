@@ -83,8 +83,9 @@ class Mind extends EventEmitter {
     this.body = o.body;
     this.comfy = o.comfy || null;
     this.hooks = o.hooks || {}; // { sight(): base64|null, idleSeconds(): number, notify(title, body) }
-    this.memory = new Memory(this.store, this.brain);
-    this.tools = new Tools(this.rules, this.store, this.comfy);
+    this.journal = o.journal || null;   // 0.5: the event log (core/journal.js); null in older setups and tests
+    this.memory = new Memory(this.store, this.brain, this.journal);
+    this.tools = new Tools(this.rules, this.store, this.comfy, this.journal);
     this.growth = null;
     this.state = Object.assign(defaultState(this.settings.get()), this.store.readState('state', {}));
     this.pending = []; // candidates pushing for attention
@@ -93,7 +94,8 @@ class Mind extends EventEmitter {
     this.thinkCounter = 0;
     this.now = o.now || (() => Date.now());
     this.state.uncensored = this.settings.get().uncensored !== false;
-    this.isNew = !this.store.readState('state', null);
+    // 0.5: new only when she has never had a state file (an unreadable one is not a new Ithil).
+    this.isNew = !fs.existsSync(this.store.p('state.json')) && !fs.existsSync(this.store.p('state.json.bak'));
     this.growth = new Growth(this, o.growthOpts);
     this.brain.onExchange = (system, user, r) => this.logExchange(system, user, r);
     if (this.isNew) this.birth();
@@ -489,6 +491,7 @@ class Mind extends EventEmitter {
       if (this.hooks.notify) this.hooks.notify(this.state.name + ' has a wish', w.text);
     } else if (p.type === 'message') {
       this.store.chat.add({ id: newId('msg'), at: this.now(), role: 'ithil', text: String(p.text).slice(0, 1000), unprompted: true });
+      if (this.journal) this.journal.ithilSaid(String(p.text).slice(0, 1000));
       decision.result = 'Messaged him.';
       if (this.hooks.notify) this.hooks.notify(this.state.name, p.text);
     } else if (p.type === 'free_time') {
@@ -661,6 +664,7 @@ class Mind extends EventEmitter {
     this.state.talkingUntil = now + 10 * 60000;
     const from = opts && opts.from ? String(opts.from).slice(0, 60) : null;
     const userMsg = this.store.chat.add({ id: newId('msg'), at: now, role: 'you', from, text: String(text).slice(0, 4000), voice: !!(opts && opts.voice) });
+    if (this.journal) this.journal.ownerSaid(userMsg.text, from);
     this.moment((from ? from + ' said: ' : 'He said: ') + text, 'talk');
     this.push('Talking with him', 85, 'talk', 'He is talking to her');
     this.attend(now);
@@ -695,6 +699,7 @@ class Mind extends EventEmitter {
     }
     if (r.pushed_back && r.pushed_back.ask) this.store.pushbacks.add({ id: newId('pb'), at: this.now(), ask: r.pushed_back.ask, why: r.pushed_back.why || '' });
     const msg = this.store.chat.add({ id: newId('msg'), at: this.now(), role: 'ithil', text: String(r.reply || '...'), thinking: r.thinking || '', usedMemories, saving });
+    if (this.journal) this.journal.ithilSaid(msg.text);
     if (r.mood) this.state.current.mood = r.mood;
     if (r.body) this.moveBody(r.body, 'while talking');
     if (tell) this.store.tasks.update(tell.id, { status: 'done', endedAt: this.now(), summary: 'Told him.' });

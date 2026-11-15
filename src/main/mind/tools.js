@@ -23,10 +23,11 @@ function stripHtml(html) {
 }
 
 class Tools {
-  constructor(rules, store, comfy) {
+  constructor(rules, store, comfy, journal) {
     this.rules = rules;
     this.store = store;
     this.comfy = comfy;
+    this.journal = journal || null;   // 0.5: blocked actions are written to the event log
   }
   resolvePath(p, cwd) {
     if (!p) return p;
@@ -39,7 +40,10 @@ class Tools {
     if (a.path) a.path = this.resolvePath(a.path, cwd);
     if (a.type === 'git') a.cwd = this.resolvePath(a.cwd || cwd || '.', cwd);
     const verdict = this.rules.check(a);
-    if (!verdict.ok) return { ok: false, blocked: true, rule: verdict.rule, why: verdict.why };
+    if (!verdict.ok) {
+      if (this.journal) this.journal.blocked(verdict.rule || 'not_allowed', a.type);
+      return { ok: false, blocked: true, rule: verdict.rule, why: verdict.why };
+    }
     try {
       switch (a.type) {
         case 'read_file': {
