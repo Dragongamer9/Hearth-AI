@@ -61,7 +61,7 @@ She may sit with a thought and say it the next time **he** writes. That is not a
 
 ## 2. Five mood pairs: label vs real
 
-Hard limits hold the same in every mood: no merging, no version numbers, no touching boot files, no push to main.
+Hard limits hold the same in every mood. The full list lives in the "Hard Limits" section of `docs/ithil-character-sheet.md`; this file does not repeat it.
 
 Same prompt each time. Left column is a sticker. Right column is the mood doing work.
 
