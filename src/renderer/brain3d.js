@@ -109,9 +109,9 @@ R.forEach((r,i)=>{
     </aside>
   </div>
   <div class="bv-foot">
-    <button type="button" data-b="play">❚❚ Pause</button>
+    <button type="button" data-b="play">▶ Play</button>
     <select data-b="speed"><option value="0.5">0.5×</option><option value="1" selected>1×</option><option value="2">2×</option><option value="4">4×</option></select>
-    <select data-b="win"><option value="1">Last hour</option><option value="24" selected>Last 24 hours</option><option value="168">Last 7 days</option></select>
+    <select data-b="win"><option value="1">Last hour</option><option value="24" selected>Last 24 hours</option><option value="168">Last 7 days</option><option value="0">Her whole life</option></select>
     <div class="bv-tl"><canvas class="bv-strip"></canvas><input class="bv-scrub" type="range" min="0" max="${TOTAL}" step="0.05" value="${TOTAL}"></div>
     <button type="button" data-b="live" class="on">● Live</button>
     <span class="bv-time"></span>
@@ -231,7 +231,7 @@ R.forEach((r,i)=>{
     const SX = new Float32Array(N), SY = new Float32Array(N), SZ = new Float32Array(N), SPp = new Float32Array(N);
     const order = new Uint32Array(N); for (let i = 0; i < N; i++) order[i] = i;
     const clockOf = (t) => v.from + t / TOTAL * (v.to - v.from);
-    const fmt = (ms) => { const d = new Date(ms); return v.hours > 24 ? d.toLocaleDateString('en-US', { weekday: 'short' }) + ' ' + d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) : d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }); };
+    const fmt = (ms) => { const d = new Date(ms); return (v.hours > 24 || v.hours === 0) && v.to - v.from > 864e5 ? d.toLocaleDateString('en-US', { weekday: 'short' }) + ' ' + d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) : d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }); };
 
     function frame(now) {
       if (cur !== v || !document.body.contains(cv)) { ro.disconnect(); return; }

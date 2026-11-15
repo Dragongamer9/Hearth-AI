@@ -44,7 +44,7 @@ data is replaced by her real data; its "MOCKUP" badge is the app's version badge
 - [x] Auto-rotate, X-ray (deep parts), Labels, Broadcast lines, Reset view; drag, scroll to zoom, click a part — src/renderer/brain3d.js: "X-ray (deep parts)"
 - [x] Awake / ☾ Sleep cycle badge — src/renderer/brain3d.js: "'☾ Sleep cycle'"
 - [x] Side panel: Parts of her mind with activity bars, part card (analogy, what, test, built / tested), Needs & mood, What's happening — src/renderer/brain3d.js: "What's happening"
-- [x] Timeline (the 4th dimension): Play/Pause, speed, a strip of her events with sleep bands, scrubber, time; plus Live and last hour / 24 hours / 7 days — src/renderer/brain3d.js: "class=\"bv-scrub\""
+- [x] Timeline (the 4th dimension): Play/Pause, speed, a strip of her events with sleep bands, scrubber, time; plus Live (follows her as she thinks) and the past: last hour / 24 hours / 7 days / her whole life, replayed from her log — src/renderer/brain3d.js: "class=\"bv-scrub\""
 - [x] Lit by her real event log, not simulated — src/main/core/live.js: "brainEvents(hours"
 - [x] Workspace now: Candidate thought, From, Strength, "won" — src/renderer/nx.js: "<th>Candidate thought</th><th>From</th><th>Strength</th>"
 - [x] Last loop line with gate ✓ and the log entry — src/renderer/nx.js: "senses → memory → confidence → attention"

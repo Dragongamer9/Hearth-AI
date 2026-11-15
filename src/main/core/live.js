@@ -170,7 +170,10 @@ class Live {
 
   // ---- the Mind screen's 3D / 4D brain: her real entries, mapped to the parts of the brain ----
   brainEvents(hours, { store, tests } = {}) {
-    const to = this.now(), from = to - Math.max(1, Number(hours) || 24) * 3600000;
+    // hours = 0: her whole life, from the first entry in her log (every past moment is kept there).
+    const to = this.now();
+    let from = to - Math.max(1, Number(hours) || 24) * 3600000;
+    if (Number(hours) === 0 && this.log) { try { const f = this.log.db.prepare('SELECT ts FROM events ORDER BY id LIMIT 1').get(); from = f ? Math.min(to - 60000, Date.parse(f.ts)) : to - 3600000; } catch (_) {} }
     const out = { from, to, events: [], moods: [], sleeps: [], tests: tests || {}, needs: Object.assign({}, this.needs) };
     if (store) out.sleeps = store.sleeps.items.filter((x) => (x.end || x.at) >= from).map((x) => ({ from: x.at, to: x.end || x.at }));
     if (!this.log) return out;
