@@ -1,0 +1,36 @@
+name: Screenshots
+
+# Runs her app with a stand-in brain (HEARTH_AI_FAKE) and saves a picture of every screen
+# to the ci/screenshots-out branch. Only when asked (Actions › Screenshots › Run workflow).
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  shots:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run bundle
+      - run: sudo apt-get update && sudo apt-get install -y xvfb libgtk-3-0 libnss3 libxss1 libasound2t64 libgbm1 fonts-dejavu fonts-noto-color-emoji
+      - name: Screenshot every screen
+        run: |
+          export HEARTH_AI_HOME="$RUNNER_TEMP/home" HEARTH_AI_FAKE=1 HEARTH_AI_SHOTS="$RUNNER_TEMP/shots"
+          mkdir -p "$HEARTH_AI_HOME"
+          echo '{"startHidden": false, "autostart": false}' > "$HEARTH_AI_HOME/settings.json"
+          timeout 600 xvfb-run -a -s "-screen 0 1600x1000x24" npx electron . --no-sandbox || true
+          ls -la "$HEARTH_AI_SHOTS"
+          ls "$HEARTH_AI_SHOTS"/*.png >/dev/null || { echo "::error::no screenshots were made"; cat "$HEARTH_AI_SHOTS/console.log" 2>/dev/null | tail -40; exit 1; }
+      - name: Save them to ci/screenshots-out
+        run: |
+          cd "$RUNNER_TEMP/shots"
+          git init -q -b ci/screenshots-out && git add -A
+          git -c user.name=Dragongamer9 -c user.email=Dragongamer9@users.noreply.github.com commit -qm "Screenshots of ${GITHUB_SHA::7}"
+          git push -f "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" ci/screenshots-out
