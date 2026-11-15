@@ -1,0 +1,10 @@
+{
+  "name": "hearth-ai",
+  "private": true,
+  "type": "module",
+  "description": "Ithil: event log and mind design",
+  "engines": { "node": ">=22.13" },
+  "scripts": {
+    "test": "node --test"
+  }
+}
