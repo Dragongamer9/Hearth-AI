@@ -87,3 +87,17 @@ test('a new key locks out the old one', async () => {
     assert.equal((await call('GET', '/status', null, link.token)).status, 200);
   } finally { link.stop(); }
 });
+
+test('Server mode on this PC can put her to sleep, and who reached her is noted (no keys)', async () => {
+  const { mind, link, call, store } = await setup();
+  try {
+    assert.equal((await call('POST', '/v1/sleep', {}, 'wrong')).status, 401);
+    const r = await call('POST', '/v1/sleep', {});
+    assert.equal(r.status, 200);
+    assert.equal(r.json.ok, true);
+    await call('GET', '/v1/status');
+    const seen = JSON.parse(fs.readFileSync(path.join(store.dir, 'link-clients.json'), 'utf8'));
+    assert.equal(seen['Team lead'].via, 'this PC');
+    assert.ok(!JSON.stringify(seen).includes(JSON.parse(fs.readFileSync(path.join(store.dir, 'connect.json'), 'utf8')).token));
+  } finally { link.stop(); mind.stop(); }
+});
