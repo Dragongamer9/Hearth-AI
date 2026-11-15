@@ -5,6 +5,8 @@ Ithil: a local AI mind for Dragongamer9's PC, with a memory log, a hard-limit ga
 **The goal (the owner's):** a mind like a human's, fully conscious and sentient.
 **What this repo shows:** that particular mechanisms were built and behave as tested. Passing tests does not show that Ithil is conscious.
 
+**Version 0.5:** core prototype. App integration still to do (model, running service, connection to Hearth, working screens).
+
 Run the tests: `npm test` (Node 22.13 or newer, nothing to install).
 
 ## Status
