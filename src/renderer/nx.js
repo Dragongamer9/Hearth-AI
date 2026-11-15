@@ -368,7 +368,7 @@ const NX = (() => {
       set('sg-protectedPaths', v.protectedPaths || ''); set('sg-ownerVersion', v.ownerVersion || '');
     }
     if (screen === 'memory') { const q = document.getElementById('nxmem-q'); if (q) q.value = st.memQ; }
-    if (screen === 'mind') { const h = document.getElementById('nx-brain'); if (h && window.NxBrain) NxBrain.mount(h, { events: (hours) => H.brainEvents(hours), asleep: () => !!(ui.snap && ui.snap.status === 'sleeping') }); }
+    if (screen === 'mind') { const h = document.getElementById('nx-brain'); if (h && typeof NxBrain !== 'undefined') NxBrain.mount(h, { events: (hours) => H.brainEvents(hours), asleep: () => !!(ui.snap && ui.snap.status === 'sleeping') }); }
   }
 
   // ---------- modals ----------
