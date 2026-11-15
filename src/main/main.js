@@ -21,7 +21,9 @@ const { Voice, VOICES } = require('./voice');
 const { Link } = require('./link');
 const { Models, ARCH_CHAN_URL } = require('./models');
 
-const VERSION = '0.4';
+// The version shown in the app and sent to the Command Center comes from package.json, so it can't lag a release
+// again (0.5 first shipped still saying 0.4). "0.5.0" shows as "0.5".
+const VERSION = require('../../package.json').version.replace(/\.0$/, '');
 const RENDERER = path.join(__dirname, '..', 'renderer');
 
 if (!app.requestSingleInstanceLock()) { app.quit(); process.exit(0); }
