@@ -40,8 +40,12 @@ data is replaced by her real data; its "MOCKUP" badge is the app's version badge
 - [x] Use this avatar, saved as a signed setting — src/renderer/nx.js: "Saved as your signed setting"
 
 ## 3 Mind
-- [x] Brain map with Workspace, Attention, Senses, Knowledge, Event log, Sleep, Needs, Self-model, Confidence, Prediction and the Hard-limit gate (not a brain part); the active part pulses — src/renderer/nx.js: "Hard-limit gate (not a brain part)"
-- [x] "Orange lines: the workspace sharing its winning thought with every part." — src/renderer/nx.js: "Orange lines: the workspace sharing"
+- [x] A full 3D / 4D brain (the team's Mind viewer, `docs/ithil/mockups/ithil-brain.html`, owner: "supposed to be a fully 3d / 4d brain … like that"): the point-cloud brain with Senses, Knowledge, Event log, Workspace, Confidence tags, Attention record, Self-model, Prediction, Needs & mood, Sleep cycle and the Hard-limit gate — src/renderer/brain3d.js: "const NxBrain"
+- [x] Auto-rotate, X-ray (deep parts), Labels, Broadcast lines, Reset view; drag, scroll to zoom, click a part — src/renderer/brain3d.js: "X-ray (deep parts)"
+- [x] Awake / ☾ Sleep cycle badge — src/renderer/brain3d.js: "'☾ Sleep cycle'"
+- [x] Side panel: Parts of her mind with activity bars, part card (analogy, what, test, built / tested), Needs & mood, What's happening — src/renderer/brain3d.js: "What's happening"
+- [x] Timeline (the 4th dimension): Play/Pause, speed, a strip of her events with sleep bands, scrubber, time; plus Live and last hour / 24 hours / 7 days — src/renderer/brain3d.js: "class=\"bv-scrub\""
+- [x] Lit by her real event log, not simulated — src/main/core/live.js: "brainEvents(hours"
 - [x] Workspace now: Candidate thought, From, Strength, "won" — src/renderer/nx.js: "<th>Candidate thought</th><th>From</th><th>Strength</th>"
 - [x] Last loop line with gate ✓ and the log entry — src/renderer/nx.js: "senses → memory → confidence → attention"
 

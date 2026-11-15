@@ -160,3 +160,15 @@ test('behaviour tests run on a copy of her log and never touch the real one', as
   assert.equal(store.chat.items.length, chats, 'nothing was said in her chat');
   journal.close(); fs.rmSync(dir, { recursive: true, force: true });
 });
+
+test('the 3D brain is lit by her real log entries', async () => {
+  const { dir, store, journal, live, mind } = setup(() => Date.now());
+  await mind.talk('What do you remember?');
+  const d = live.brainEvents(24, { store });
+  const regs = new Set(d.events.map((e) => e.reg));
+  for (const r of ['senses', 'workspace', 'memory', 'gate', 'prediction']) assert.ok(regs.has(r), r);
+  assert.ok(d.events.some((e) => e.bc), 'a broadcast');
+  assert.ok(d.moods.length >= 1);
+  assert.ok(d.to > d.from);
+  journal.close(); fs.rmSync(dir, { recursive: true, force: true });
+});

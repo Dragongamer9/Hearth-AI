@@ -325,6 +325,8 @@ function setupIpc() {
     mind.emit('update');
     return { ok: true };
   });
+  // 0.6: the Mind screen's 3D / 4D brain.
+  ipcMain.handle('brain:events', (_e, hours) => live.brainEvents(hours, { store, tests: store.readState('core-tests', {}) }));
   // 0.6: Tests screen.
   ipcMain.handle('tests:run', async (_e, name) => {
     const all = store.readState('core-tests', {});

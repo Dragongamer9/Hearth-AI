@@ -168,6 +168,58 @@ class Live {
     return tags;
   }
 
+  // ---- the Mind screen's 3D / 4D brain: her real entries, mapped to the parts of the brain ----
+  brainEvents(hours, { store, tests } = {}) {
+    const to = this.now(), from = to - Math.max(1, Number(hours) || 24) * 3600000;
+    const out = { from, to, events: [], moods: [], sleeps: [], tests: tests || {}, needs: Object.assign({}, this.needs) };
+    if (store) out.sleeps = store.sleeps.items.filter((x) => (x.end || x.at) >= from).map((x) => ({ from: x.at, to: x.end || x.at }));
+    if (!this.log) return out;
+    const cut = (t, n = 70) => { t = String(t || '').replace(/\s+/g, ' ').trim(); return t.length > n ? t.slice(0, n - 1) + '…' : t; };
+    const evs = this.log.all();
+    const E = (x, ms, reg, text, o) => out.events.push(Object.assign({ id: x.id, ms, reg, text }, o || {}));
+    for (const x of evs) {
+      const ms = Date.parse(x.ts); if (!(ms >= from)) continue;
+      const b = x.body || {};
+      switch (x.kind) {
+        case 'owner.message': E(x, ms, 'senses', 'He said: ' + cut(b.text), { turn: true }); break;
+        case 'ithil.message':
+          E(x, ms - 1500, 'attention', 'Focused, then chose what to say', { quiet: true });
+          E(x, ms - 1200, 'workspace', 'Broadcast to every part', { bc: true, quiet: true });
+          E(x, ms - 800, 'confidence', 'Claims tagged: remembered / summary / guess');
+          E(x, ms - 300, 'gate', 'Gate: reply allowed');
+          E(x, ms, 'workspace', 'Replies: ' + cut(b.text));
+          E(x, ms + 300, 'memory', 'Event #' + x.id + ' written (passed the gate)');
+          break;
+        case 'system.input':
+          if (b.observedKind) E(x, ms, 'prediction', 'His reply was: ' + String(b.observedKind).replace('_', ' '));
+          else if (b.allowed) E(x, ms, 'gate', 'Gate: ' + b.allowed + ' allowed');
+          else if (b.applied === 'settings') E(x, ms, 'gate', 'Your signed setting applied: ' + cut(b.key, 40));
+          else if (b.from) E(x, ms, 'senses', cut(b.from, 20) + ': ' + cut(b.text), { turn: true });
+          break;
+        case 'memory.pin': E(x, ms, 'knowledge', (x.actor === 'owner' ? 'You pinned: ' : 'Kept: ') + cut(b.value, 60)); break;
+        case 'memory.correct': E(x, ms, 'knowledge', 'Correction to #' + x.ref + ' (new entry)'); break;
+        case 'memory.delete': E(x, ms, 'memory', 'You marked #' + x.ref + ' deleted (still in the log)'); break;
+        case 'owner.restore': E(x, ms, 'memory', 'You restored #' + x.ref); break;
+        case 'owner.purge': E(x, ms, 'memory', 'You erased #' + x.ref + ' (words wiped)'); break;
+        case 'memory.forget': E(x, ms, 'sleep', 'Marked #' + x.ref + ' "forget" (left out of search; nothing erased)'); break;
+        case 'reflection':
+          if (b.sleep) E(x, ms, 'knowledge', 'Sleep summary: ' + cut(b.text));
+          else if (b.field) E(x, ms, 'selfmodel', 'Self-model: ' + cut(b.field + ': ' + b.value));
+          else E(x, ms, 'selfmodel', 'Reflection: ' + cut(b.text));
+          break;
+        case 'mood.snapshot':
+          out.moods.push(Object.assign({ ms }, b));
+          E(x, ms, 'needs', 'Needs by fixed rules: energy ' + Number(b.energy).toFixed(2) + ', curiosity ' + Number(b.curiosity).toFixed(2), { quiet: true });
+          break;
+        case 'gate.reject': E(x, ms, 'gate', 'Gate: BLOCKED (hard limit: ' + String(b.limit).replace(/_/g, ' ') + ') · ' + b.effect, { block: true }); break;
+      }
+    }
+    for (const sl of out.sleeps) { out.events.push({ id: 's' + sl.from, ms: sl.from, reg: 'sleep', text: 'Sleep cycle starts' }); if (sl.to > sl.from) out.events.push({ id: 'w' + sl.to, ms: sl.to, reg: 'sleep', text: 'Wakes up' }); }
+    out.events.sort((a, b) => a.ms - b.ms);
+    if (out.events.length > 4000) out.events = out.events.slice(-4000);
+    return out;
+  }
+
   // ---- views for the screens ----
   view({ store, settings, mind }) {
     const now = this.now();

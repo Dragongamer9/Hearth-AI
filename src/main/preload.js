@@ -56,6 +56,7 @@ contextBridge.exposeInMainWorld('hearth', {
   memlogAct: call('memlog:act'),
   correctBelief: call('belief:correct'),
   runTest: call('tests:run'),
+  brainEvents: call('brain:events'),
   onSnapshot: (fn) => ipcRenderer.on('snapshot', (_e, s) => fn(s)),
   onNavigate: (fn) => ipcRenderer.on('navigate', (_e, s) => fn(s))
 });

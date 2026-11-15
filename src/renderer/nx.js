@@ -78,13 +78,13 @@ const NX = (() => {
     </div>
   </div>
 </section>`,
-    mind: (s) => `<section class="screen" id="mind">
-  ${head('Mind', 'Which parts are working right now. Brain regions are analogies, not equivalents. Full 3D view: <span class="mono">docs/mockups/ithil-brain.html</span>')}
-  <div class="grid g2">
-    <div class="card"><div data-part="brain"></div>
-      <div class="dim" style="font-size:11px">Orange lines: the workspace sharing its winning thought with every part.</div></div>
-    <div class="card"><h3>Workspace now</h3><div data-part="ws"></div>
-      <h3 style="margin-top:6px">Last loop</h3><div class="mono dim" style="line-height:1.9" data-part="loop"></div></div>
+    mind: () => `<section class="screen" id="mind">
+  ${head('Mind', 'Which parts are working right now, from her event log. Brain regions are analogies, not equivalents. Drag to turn her brain; the timeline moves through time (the 4th dimension).')}
+  <div class="card" style="padding:0;overflow:hidden"><div id="nx-brain"></div></div>
+  <div class="grid g2" style="margin-top:14px">
+    <div class="card"><h3>Workspace now</h3><div data-part="ws"></div></div>
+    <div class="card"><h3>Last loop</h3><div class="mono dim" style="line-height:1.9" data-part="loop"></div>
+      <div class="dim" style="font-size:11px">Orange lines in the brain: the workspace sharing its winning thought with every part.</div></div>
   </div>
 </section>`,
     memory: () => `<section class="screen" id="memory">
@@ -368,6 +368,7 @@ const NX = (() => {
       set('sg-protectedPaths', v.protectedPaths || ''); set('sg-ownerVersion', v.ownerVersion || '');
     }
     if (screen === 'memory') { const q = document.getElementById('nxmem-q'); if (q) q.value = st.memQ; }
+    if (screen === 'mind') { const h = document.getElementById('nx-brain'); if (h && window.NxBrain) NxBrain.mount(h, { events: (hours) => H.brainEvents(hours), asleep: () => !!(ui.snap && ui.snap.status === 'sleeping') }); }
   }
 
   // ---------- modals ----------

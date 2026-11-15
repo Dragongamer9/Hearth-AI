@@ -137,3 +137,36 @@ svg text{fill:var(--dim);font-size:10px}
 .fold .orb{box-shadow:0 0 18px #a78bfa55}
 .fold section.stage{display:none}
 .fold[data-fold="mind"] .rowc .btns{gap:8px}
+
+/* 0.6: the Mind screen's 3D / 4D brain (from the team's viewer) */
+.bv{display:grid;grid-template-rows:1fr auto;height:600px}
+.bv-main{display:grid;grid-template-columns:1fr 300px;min-height:0}
+.bv-stage{position:relative;min-height:0;overflow:hidden;background:radial-gradient(ellipse at 50% 45%,#141b2e 0%,#0b0e17 70%)}
+.bv-c{display:block;width:100%;height:100%;cursor:grab}.bv-c.drag{cursor:grabbing}
+.bv-tools{position:absolute;top:10px;left:10px;display:flex;gap:6px;flex-wrap:wrap}
+.bv-tools button,.bv-foot button,.bv-foot select{background:#1a2133;color:var(--text);border:1px solid var(--line);border-radius:7px;padding:5px 10px;font:inherit;cursor:pointer}
+.bv-tools button.on,.bv-foot button.on{background:#2a1f12;border-color:#9a4d16;color:#fed7aa}
+.bv-hint{position:absolute;bottom:10px;left:12px;color:var(--dim);font-size:11px}
+.bv-phase{position:absolute;top:10px;right:12px;font-size:12px;padding:4px 10px;border-radius:7px;background:#0f1424cc;border:1px solid var(--line)}
+.bv-side{border-left:1px solid var(--line);background:#121726;overflow:auto;min-height:0;padding:10px 12px}
+.bv-side h4{font-size:11px;text-transform:uppercase;letter-spacing:1px;color:var(--dim);margin:12px 0 6px;font-weight:600}
+.bv-side h4:first-child{margin-top:2px}
+.bv-part{display:grid;grid-template-columns:10px 1fr 70px;gap:8px;align-items:center;padding:5px 6px;border-radius:6px;cursor:pointer}
+.bv-part:hover{background:#1a2133}.bv-part.sel{background:#22293d;outline:1px solid #3a4560}
+.bv-dot{width:10px;height:10px;border-radius:50%}
+.bv-pn{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.bv-bar{height:6px;background:#0b0e17;border-radius:3px;overflow:hidden;display:block}.bv-bar i{display:block;height:100%;width:0}
+.bv-card{background:#0f1424;border:1px solid var(--line);border-radius:8px;padding:10px;margin-top:4px}
+.bv-card b{font-size:13px}.bv-ana{color:var(--dim);font-style:italic;margin:2px 0 6px}.bv-row{margin-top:6px}
+.bv-chip{display:inline-block;font-size:10px;padding:1px 7px;border-radius:99px;border:1px solid #475069;color:#b8c0d6;margin-right:4px}
+.bv-chip.ok{border-color:#166534;color:#86efac}.bv-chip.bad{border-color:#7f1d1d;color:#fca5a5}
+.bv-gauge{display:grid;grid-template-columns:70px 1fr 34px;gap:8px;align-items:center;margin:4px 0}
+.bv-gauge .bv-bar{height:8px}.bv-gauge span:last-child{text-align:right;color:var(--dim);font-variant-numeric:tabular-nums}
+.bv-feed{list-style:none;margin:0;padding:0;font-size:12px}
+.bv-feed li{display:grid;grid-template-columns:44px 1fr;gap:6px;padding:4px 0;border-bottom:1px solid #1a2133;color:#c9cfdf}
+.bv-feed li:first-child{color:#fff}.bv-feed li .t{color:var(--dim);font-variant-numeric:tabular-nums}.bv-feed li.block{color:#fca5a5}
+.bv-foot{border-top:1px solid var(--line);padding:8px 14px;display:grid;grid-template-columns:auto auto auto 1fr auto auto;gap:10px;align-items:center}
+.bv-tl{position:relative;height:34px}
+.bv-strip{position:absolute;left:0;right:0;top:0;height:14px;width:100%}
+.bv-scrub{position:absolute;left:0;right:0;bottom:0;width:100%;margin:0;accent-color:var(--orange)}
+.bv-time{font-variant-numeric:tabular-nums;color:var(--dim);min-width:70px;text-align:right}
