@@ -77,6 +77,30 @@ class Rules {
     this.folders = saved && Array.isArray(saved.folders) ? saved.folders : [defaultWs];
     if (!this.folders.includes(defaultWs)) this.folders.unshift(defaultWs);
   }
+  // 0.6: his signed settings (pushBranch, protectedPaths) are read from here.
+  useSettings(get) { this.getSettings = get; }
+  setting(k) { try { return this.getSettings ? this.getSettings()[k] : undefined; } catch (_) { return undefined; } }
+  // Boot files plus any extra paths he protected (Settings › Boot files).
+  isProtected(p) {
+    if (isBootPath(p)) return true;
+    const extra = String(this.setting('protectedPaths') || '').split(',').map((x) => x.trim()).filter(Boolean);
+    const r = real(p);
+    return extra.some((x) => { const e = real(x); return r === e || r.startsWith(e + path.sep) || path.basename(r) === x; });
+  }
+  // A signed change from his Settings: the whole list at once (her workspace always stays).
+  setFoldersByOwner(list) {
+    const ws = path.join(this.store.dir, 'workspace');
+    const out = [ws], refused = [];
+    for (const p of list || []) {
+      if (!p) continue;
+      const r = real(p);
+      if (isProtectedFolder(r)) { refused.push(p); continue; }
+      if (!out.includes(r)) out.push(r);
+    }
+    this.folders = out;
+    this.store.writeState('folders', { folders: this.folders });
+    return { ok: true, folders: this.folders, refused };
+  }
   // Only called from the user's own UI action, never from the mind.
   addFolderByUser(p) {
     const r = real(p);
@@ -108,7 +132,7 @@ class Rules {
         return { ok: true };
       case 'write_file': {
         if (!a.path) return deny(null, 'No path given.');
-        if (isBootPath(a.path)) return deny(NEVER[2], 'Boot files are off limits.');
+        if (this.isProtected(a.path)) return deny(NEVER[2], 'Boot files are off limits.');
         if (!this.inAllowedFolder(a.path)) return deny(null, 'That folder is not one he allowed.');
         // 0.5: a repo's .git folder runs commands (hooks, config): never hers to write.
         if (real(a.path).split(path.sep).includes('.git')) return deny(NEVER[5], 'A repo\u2019s .git folder (hooks and config) is off limits.');
@@ -123,7 +147,13 @@ class Rules {
         const args = (a.args || []).map(String);
         const sub = args[0];
         if (!a.cwd || !this.inAllowedFolder(a.cwd)) return deny(null, 'That folder is not one he allowed.');
-        if (isBootPath(a.cwd)) return deny(NEVER[2], 'Boot files are off limits.');
+        if (this.isProtected(a.cwd)) return deny(NEVER[2], 'Boot files are off limits.');
+        // 0.6: a push only to the one branch he allowed in his signed Settings (never main, never tags).
+        if (sub === 'push') {
+          const pb = String(this.setting('pushBranch') || '').trim();
+          if (pb && !/^(main|master)$/.test(pb) && gitLimit(args, pb) === null) return { ok: true };
+          return Object.assign(deny(NEVER[0], pb ? 'She only pushes to ' + pb + ', as HEAD:' + pb + '.' : 'He hasn\u2019t allowed a push branch.'), { code: 'push_branch' });
+        }
         // 0.5: the core gate's git check as well (global options like -c, --output and other ways around these rules).
         const lim = gitLimit(args, null);
         if (lim && lim !== 'push_branch') return deny(lim === 'merge' || lim === 'release' ? NEVER[0] : lim === 'delete_owner_files' ? NEVER[4] : null, 'git ' + args.join(' ').slice(0, 60) + ' is not allowed.');

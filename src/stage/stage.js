@@ -131,7 +131,7 @@ class VrmStage extends Base {
     loader.register((parser) => new VRMLoaderPlugin(parser));
     const gltf = await loader.loadAsync(url);
     const vrm = gltf.userData.vrm;
-    if (!vrm) throw new Error('That file is not a VRM model.');
+    if (!vrm) return this.startPlain(gltf.scene, c);   // 0.6: a plain glTF model (no VRM bones or faces)
     VRMUtils.removeUnnecessaryVertices(gltf.scene);
     VRMUtils.combineSkeletons ? VRMUtils.combineSkeletons(gltf.scene) : null;
     VRMUtils.rotateVRM0(vrm);
@@ -161,6 +161,24 @@ class VrmStage extends Base {
     this.loop();
     this.onReady(this);
   }
+  // 0.6: a glTF without VRM: stand it on the floor, size the camera to it, and let it breathe and turn.
+  startPlain(scene, c) {
+    this.plain = scene; this.t = 0;
+    this.scene.add(scene);
+    const box = new THREE.Box3().setFromObject(scene);
+    const size = box.getSize(new THREE.Vector3()), centre = box.getCenter(new THREE.Vector3());
+    const h = Math.max(size.y, size.x, 0.01), k = 1.6 / h;
+    scene.scale.setScalar(k);
+    scene.position.set(-centre.x * k, -box.min.y * k, -centre.z * k);
+    this.expressions = [];
+    this.height = 1.6; this.headY = 1.42; this.chestY = 1.1; this.hipsY = 0.8;
+    this.setCamera(this.o.camera);
+    this.lastT = performance.now();
+    this.ro = new ResizeObserver(() => this.resize());
+    this.ro.observe(c);
+    this.loop();
+    this.onReady(this);
+  }
   resize() {
     if (this.destroyed) return;
     const w = this.container.clientWidth, h = this.container.clientHeight;
@@ -171,7 +189,7 @@ class VrmStage extends Base {
   }
   setCamera(which) {
     this.o.camera = which || 'full';
-    if (!this.vrm) return;
+    if (!this.vrm && !this.plain) return;
     const fov = THREE.MathUtils.degToRad(this.camera.fov);
     const presets = {
       full: { y: this.height / 2, span: this.height * 1.12 },
@@ -202,6 +220,13 @@ class VrmStage extends Base {
     this.renderer.render(this.scene, this.camera);
   }
   update(dt) {
+    if (this.plain) {
+      this.t += dt;
+      const s = 1 + 0.012 * Math.sin(this.t * 1.6);
+      this.plain.rotation.y = 0.25 * Math.sin(this.t * 0.35);
+      this.plain.scale.y = this.plain.scale.x * s;
+      return;
+    }
     const vrm = this.vrm;
     this.t += dt;
     const t = this.t;
@@ -276,6 +301,7 @@ class VrmStage extends Base {
     cancelAnimationFrame(this.raf);
     if (this.ro) this.ro.disconnect();
     if (this.vrm) VRMUtils.deepDispose(this.vrm.scene);
+    if (this.plain) VRMUtils.deepDispose(this.plain);
     if (this.renderer) { this.renderer.dispose(); this.renderer.domElement.remove(); }
     if (this.controls) this.controls.dispose();
   }

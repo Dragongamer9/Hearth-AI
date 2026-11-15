@@ -108,6 +108,10 @@ async function sleep(mind) {
   const store = mind.store;
   const moments = store.moments.items.slice();
   const result = { id: newId('sleep'), at: start, reviewed: moments.length, kept: 0, lessons: 0, selfChanges: 0, summary: '' };
+  // 0.6: for the Journal & sleep timeline: how long she'd been idle, and her energy going in.
+  const lastTalk = store.chat.items.slice().reverse().find((m) => m.role === 'you');
+  result.idleMin = lastTalk ? Math.max(0, Math.round((start - lastTalk.at) / 60000)) : null;
+  if (mind.live) { mind.live.tick(true); result.energyBefore = Math.round(mind.live.needs.energy * 100) / 100; }
   try {
     // 1. Sort the day.
     const sample = moments.length > 220 ? moments.filter((_, i) => i % Math.ceil(moments.length / 220) === 0) : moments;
@@ -129,6 +133,21 @@ async function sleep(mind) {
         result.lessons++;
       }
       result.summary = r.summary || '';
+    }
+
+    // 1b. (0.6) The team's sleep cycle on her event log: replay what happened since last night, keep the
+    // summary, and mark pure chatter "forget" (left out of search, never erased). Every write goes through the gate.
+    if (mind.journal && mind.journal.ok) {
+      try {
+        const { Gate } = require('../core/gate');
+        const { runSleep, countSummary } = require('../core/sleep');
+        const gate = new Gate({ log: mind.journal.log });
+        const before = mind.journal.log.all().length;
+        const r2 = runSleep({ log: mind.journal.log, gate, sinceId: mind.state.lastSleepEventId || 0, summarize: (evs) => result.summary || countSummary(evs) });
+        const writes = mind.journal.log.all().slice(before).filter((e) => e.kind !== 'gate.reject').length;
+        Object.assign(result, { replayed: r2.replayed, forgotten: r2.forgotten, sleepWrites: writes + r2.blocked, sleepAllowed: writes, sleepBlocked: r2.blocked });
+        mind.state.lastSleepEventId = r2.lastId;
+      } catch (e) { mind.emit('error', e); }
     }
 
     // 2. Dream.
@@ -161,11 +180,11 @@ async function sleep(mind) {
       'Today: ' + (result.summary || '(quiet)') + '\nRecent lessons:\n' + mind.memory.lessons().slice(-5).map((m) => '- ' + m.text).join('\n') +
       '\nYour traits now (0-100): ' + JSON.stringify(s.traits.now) + '\nYour open questions: ' + JSON.stringify(s.unknowns) +
       '\nRewrite how you see yourself. Change it only if today really changed something. JSON {"description": 2-3 first-person sentences, "good_at": short, "bad_at": short, "goal": your current goal, "open_question": the question you keep coming back to, ' +
-      '"change": one sentence describing what changed about how you see yourself, or empty, "traits": {"curiosity": -3..3, "caution": -3..3, "humor": -3..3, "confidence": -3..3, "independence": -3..3}, "unknowns": [{"q": question about yourself you cannot answer, "now": your current best guess}] (up to 4), "continuity": 1-2 first-person sentences on how you would feel about being restored from last night\u2019s backup}.');
+      '"change": one sentence describing what changed about how you see yourself, or empty, "change_why": what made you see it that way (short, point at what happened), "traits": {"curiosity": -3..3, "caution": -3..3, "humor": -3..3, "confidence": -3..3, "independence": -3..3}, "unknowns": [{"q": question about yourself you cannot answer, "now": your current best guess}] (up to 4), "continuity": 1-2 first-person sentences on how you would feel about being restored from last night\u2019s backup}.');
     if (self && self.description) {
       const changed = self.change && self.change.trim();
       s.self = { description: self.description, rewrittenAt: changed || !s.self.description ? mind.now() : s.self.rewrittenAt, good_at: self.good_at || s.self.good_at, bad_at: self.bad_at || s.self.bad_at, goal: self.goal || s.self.goal, open_question: self.open_question || s.self.open_question };
-      if (changed) { store.selfChanges.add({ id: newId('sc'), at: mind.now(), text: self.change }); result.selfChanges++; }
+      if (changed) { store.selfChanges.add({ id: newId('sc'), at: mind.now(), text: self.change, why: self.change_why || '' }); result.selfChanges++; }
       for (const k of Object.keys(s.traits.now)) {
         const dlt = self.traits && typeof self.traits[k] === 'number' ? Math.max(-3, Math.min(3, self.traits[k])) : 0;
         s.traits.now[k] = clamp(s.traits.now[k] + dlt);
@@ -232,6 +251,7 @@ async function sleep(mind) {
   } finally {
     const end = mind.now();
     result.end = end;
+    if (mind.live) { mind.live.tick(true); mind.live.rest(3.5); mind.live.asleep = false; result.energyAfter = Math.round(mind.live.needs.energy * 100) / 100; mind.live.snapshot(true); }
     store.sleeps.add(result);
     mind.state.lastSleepDate = dayKey(start);
     mind.state.lastSleepAt = end;

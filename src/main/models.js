@@ -100,6 +100,23 @@ class Models {
     return m;
   }
 
+  // 0.6: any glTF model (.glb, or a .gltf with its files). It plays in the same 3D stage as a VRM; without
+  // VRM bones it doesn't pose or make faces, but it breathes, turns and follows her mood.
+  importGltf(file) {
+    const id = newId('glb');
+    const dest = path.join(this.dir, id);
+    fs.mkdirSync(dest, { recursive: true });
+    let rel;
+    if (/\.glb$/i.test(file)) { fs.copyFileSync(file, path.join(dest, 'model.glb')); rel = 'model.glb'; }
+    else { copyDir(path.dirname(file), dest); rel = path.basename(file); }
+    const lic = findLicense(path.dirname(file));
+    const m = { id, kind: 'vrm', plain: true, file: rel, name: path.basename(file, path.extname(file)), kindLabel: '3D · glTF',
+      license: lic ? 'License file: ' + path.basename(lic) : 'Check its license', source: 'import', at: Date.now() };
+    this.list.push(m);
+    this.save();
+    return m;
+  }
+
   importLive2d(folderOrFile) {
     const src = fs.statSync(folderOrFile).isDirectory() ? folderOrFile : path.dirname(folderOrFile);
     const model3 = fs.statSync(folderOrFile).isFile() && /\.model3\.json$/i.test(folderOrFile) ? folderOrFile : findModel3(src);

@@ -68,11 +68,20 @@ class Journal {
     if (!pin) return null;
     return this.safe((l) => { const ids = l.purge(pin); this.pins.delete(memId); return ids; });
   }
+  // 0.6: his Memory screen, by event id (Mark deleted / Restore / Erase…).
+  markDeletedByOwner(pinId) { return this.safe((l) => l.markDeleted(pinId)); }
+  restoreByOwner(pinId) { return this.safe((l) => l.restore(pinId)); }
+  eraseByOwner(pinId) {
+    return this.safe((l) => { const ids = l.purge(pinId); for (const [k, v] of this.pins) if (v === pinId) this.pins.delete(k); return ids; });
+  }
+  memIdOf(pinId) { for (const [k, v] of this.pins) if (v === pinId) return k; return null; }
   // An action the rules blocked: fixed tokens only, never the content.
   blocked(rule, type) {
     const tok = (s, d) => (String(s || d).toLowerCase().replace(/[^a-z0-9_.-]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 64) || d);
     return this.safe((l) => l.reject({ limit: tok(rule, 'rule'), effect: tok(type, 'action'), requestId: 'r-' + Date.now().toString(36) }));
   }
+  // 0.6: an action the rules allowed (file writes, pushes), counted on the Gate screen.
+  allowed(what) { return this.safe((l) => l.input({ allowed: String(what).slice(0, 40) })); }
   status() {
     if (!this.ok) return { ok: false, why: this.why };
     return this.safe((l) => ({ ok: true, events: l.db.prepare('SELECT COUNT(*) AS n FROM events').get().n, file: this.file, note: this.why || '' })) || { ok: false, why: this.why };

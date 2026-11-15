@@ -5,7 +5,16 @@ const H = window.hearth;
 const pic = document.getElementById('pic');
 const host = document.getElementById('host');
 const btn = document.getElementById('talk');
-let stage = null, key = null, loading = false;
+let stage = null, key = null, loading = false, snap = null;
+const cv = document.getElementById('bcv');
+(function frame(now) {
+  const s = snap;
+  if (s && s.avatar.settings.bodyType === 'builtin' && window.NxAvatars) {
+    const a = s.avatar.settings, n = a.followMood === false ? null : (s.nx && s.nx.needs);
+    NxAvatars.draw(cv, NxAvatars.index(a.builtin || 'orb'), NxAvatars.COLS[a.glow || 0], now / 1000, { yaw: 0.3 * Math.sin(now / 5000), pitch: 0.1, needs: n || NxAvatars.MOODS.rested, follow: !!n, zoom: 0.36 });
+  }
+  requestAnimationFrame(frame);
+})(0);
 
 function live(s) { const t = s.avatar.settings.bodyType; return (t === 'vrm' || t === 'live2d') && s.models && s.models.current && (t !== 'live2d' || s.models.coreUrl); }
 
@@ -30,6 +39,10 @@ async function show(s) {
     return;
   }
   if (stage) { stage.destroy(); stage = null; key = null; }
+  // 0.6: her built-in 3D avatar (Moon orb, Crystal, Humanoid, Wisp, Lantern).
+  const bt = s.avatar.settings.bodyType;
+  cv.style.display = bt === 'builtin' ? '' : 'none';
+  if (bt === 'builtin') { pic.style.display = 'none'; snap = s; return; }
   pic.style.display = '';
   const p = s.avatar.portrait;
   if (p && s.avatar.settings.bodyType === 'drawn') { pic.className = 'pic'; pic.style.backgroundImage = "url('" + p + "')"; pic.style.backgroundSize = s.avatar.settings.framing === 'portrait' ? '115% auto' : 'contain'; pic.style.backgroundPosition = s.avatar.settings.framing === 'portrait' ? 'center 8%' : 'center bottom'; pic.style.backgroundColor = 'transparent'; pic.style.border = 'none'; pic.style.boxShadow = 'none'; }

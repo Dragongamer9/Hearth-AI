@@ -11,6 +11,9 @@ const { Store, homeDir } = require('./mind/store');
 const { Settings } = require('./mind/settings');
 const { Rules } = require('./mind/rules');
 const { Journal } = require('./core/journal');
+const { Live } = require('./core/live');
+const { SignedSettings } = require('./core/owner');
+const selftest = require('./core/selftest');
 const { OllamaBrain, FakeBrain } = require('./mind/llm');
 const { Body } = require('./mind/body');
 const { Mind } = require('./mind/engine');
@@ -30,12 +33,32 @@ if (!app.requestSingleInstanceLock()) { app.quit(); process.exit(0); }
 protocol.registerSchemesAsPrivileged([{ scheme: 'ithil', privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true, corsEnabled: true } }]);
 
 let win = null, buddy = null, tray = null, quitting = false;
-let store, settings, rules, brain, body, comfy, mind, voice, link, models, journal;
+let store, settings, rules, brain, body, comfy, mind, voice, link, models, journal, live, signed;
 let bodyExpressions = [];
 let captureWaiters = [];
 const status = { brainOk: true, comfyOk: true, drawing: false, listening: false, drawProgress: null, update: null };
 
 function getSettings() { return settings.get(); }
+// 0.6: a settings change from his screens, signed and checked by her gate (core/owner.js).
+function signedSet(patch) { return signed ? signed.change('patch', patch, describePatch(patch)) : settings.setByUser(patch); }
+const { setPathValue } = (() => ({ setPathValue: (p, v) => { const out = {}; let cur = out; const ks = String(p).split('.'); ks.slice(0, -1).forEach((k) => { cur[k] = {}; cur = cur[k]; }); cur[ks[ks.length - 1]] = v; return out; } }))();
+// "avatar.places.talk → true, quietHours → 23:00-08:00"
+function describePatch(patch, pre) {
+  const out = [];
+  for (const k of Object.keys(patch || {})) {
+    const v = patch[k], key = pre ? pre + '.' + k : k;
+    if (v && typeof v === 'object' && !Array.isArray(v)) out.push(describePatch(v, key)); else out.push(key + ' \u2192 ' + (k === 'hfToken' ? '(hidden)' : String(v).slice(0, 60)));
+  }
+  return out.filter(Boolean).join(', ').slice(0, 200);
+}
+// The only place a signed change is applied (after her gate checked his signature).
+function applySigned(key, value) {
+  if (key === 'patch') return settings.setByUser(value);
+  if (key === 'folders') { const r = rules.setFoldersByOwner(Array.isArray(value) ? value : String(value).split(',').map((x) => x.trim())); return r; }
+  if (['quietHours', 'messagesFirstPerDay', 'pushBranch', 'protectedPaths', 'ownerVersion'].includes(key)) return settings.setByUser({ [key]: key === 'messagesFirstPerDay' ? Math.max(0, Math.min(5, Number(value) || 0)) : String(value).trim() });
+  if (String(key).startsWith('avatar.')) return settings.setByUser(setPathValue(key, value));
+  throw new Error('not a setting: ' + key);
+}
 
 function setupMind() {
   store = new Store(homeDir());
@@ -43,12 +66,16 @@ function setupMind() {
   rules = new Rules(store);
   // 0.5: her event log. If it can't open she still starts, exactly as in 0.4 (journal.ok is false).
   try { journal = new Journal(store.dir); } catch (e) { journal = null; console.error('[journal]', e && e.message); }
+  // 0.6: the team's core mind (needs, workspace, prediction) and his signed settings.
+  live = new Live({ journal });
+  rules.useSettings(getSettings);
+  signed = new SignedSettings({ journal, dir: store.dir, apply: (key, value) => applySigned(key, value) });
   brain = process.env.HEARTH_AI_FAKE ? new FakeBrain() : new OllamaBrain(getSettings, () => (mind && mind.growth ? mind.growth.activeModel() : null));
   body = new Body(store, getSettings);
   comfy = new Comfy(getSettings);
   voice = new Voice(store.p('models'));
   mind = new Mind({
-    store, brain, settings, rules, body, comfy, journal,
+    store, brain, settings, rules, body, comfy, journal, live,
     hooks: {
       idleSeconds: () => (settings.get().senses.presence ? powerMonitor.getSystemIdleTime() : 9999),
       bodyInfo: () => {
@@ -104,6 +131,10 @@ async function checkServices() {
 function view() {
   return Object.assign(snapshot(mind, { version: VERSION, brainOk: status.brainOk, comfyOk: status.comfyOk, drawing: status.drawing, listening: status.listening, link: link ? link.view() : null }), {
     journal: journal ? journal.status() : { ok: false, why: 'not started' },
+    nx: Object.assign(live.view({ store, settings: settings.get(), mind }), {
+      signedOk: signed.ok, signedWhy: signed.why, sleeps: store.sleeps.items.slice(-1),
+      beliefs: store.selfChanges.items.slice(-6).reverse(), tests: store.readState('core-tests', {}),
+      traits: mind.state.traits, folders: rules.folders }),
     drawProgress: status.drawProgress, update: status.update, link: link ? link.view() : null, models: modelsView(), pulling: status.pulling, modelsMissing: status.modelsMissing, ttsVoices: VOICES, roster: ROSTER
   });
 }
@@ -244,15 +275,18 @@ function setupIpc() {
     if (sug && sug.changes) {
       const ok = {};
       for (const k of ['hair', 'eyes', 'outfit', 'nightOutfit', 'buddyPose', 'scene', 'camera']) if (sug.changes[k]) ok[k] = String(sug.changes[k]).slice(0, 80);
-      settings.setByUser({ avatar: ok });
+      signedSet({ avatar: ok });
       if (settings.get().avatar.bodyType === 'drawn' && (ok.hair || ok.eyes || ok.outfit || ok.nightOutfit)) redrawAvatar();
       mind.emit('update');
     }
     return true;
   });
+  // 0.6: every settings change from his screens is signed with his key and checked by her gate first.
   ipcMain.handle('settings:set', (_e, patch) => {
     const before = settings.get();
-    const v = settings.setByUser(patch);
+    const r = signed.change('patch', patch, describePatch(patch));
+    if (!r.ok) return settings.get();
+    const v = settings.get();
     if (patch && 'autostart' in patch) setAutostart(v.autostart);
     if (patch && patch.avatar && patch.avatar.places) createBuddy();
     if (patch && ('allowCommandCenter' in patch || 'allowLanConnections' in patch)) link.start();
@@ -261,6 +295,46 @@ function setupIpc() {
     return v;
   });
   ipcMain.handle('identity:set', (_e, patch) => { mind.setIdentityByUser(patch); mind.emit('update'); return true; });
+  // 0.6: Settings › Sign & apply (quiet hours, messages first, push branch, folders, boot files, version number).
+  ipcMain.handle('signed:apply', (_e, key, value) => {
+    const r = signed.change(key, value, key + ' \u2192 ' + (Array.isArray(value) ? value.join(', ') : String(value)));
+    mind.emit('update');
+    return r;
+  });
+  // 0.6: Memory screen (his actions, by event id).
+  ipcMain.handle('memlog:act', async (_e, act, pinId) => {
+    if (!journal || !journal.ok) return { ok: false };
+    const memId = journal.memIdOf(pinId);
+    if (act === 'mark') { journal.markDeletedByOwner(pinId); if (memId) mind.memory.setHiddenByOwner(memId, true); }
+    else if (act === 'restore') { journal.restoreByOwner(pinId); if (memId) mind.memory.setHiddenByOwner(memId, false); }
+    else if (act === 'erase') {
+      if (memId) { mind.memory.forget(memId); } else journal.eraseByOwner(pinId);
+      mind.moment('He erased something from my memory.', 'self');
+    }
+    mind.emit('update');
+    return { ok: true };
+  });
+  // 0.6: Journal & sleep › Correct: he corrects a belief she has about herself.
+  ipcMain.handle('belief:correct', async (_e, id, text) => {
+    const b = store.selfChanges.items.find((x) => x.id === id);
+    if (!b || !text) return { ok: false };
+    store.selfChanges.update(id, { corrected: String(text).slice(0, 300), correctedAt: Date.now() });
+    store.selfChanges.save();
+    await mind.memory.remember({ kind: 'lesson', weight: 'high', text: 'He corrected how I see myself: "' + b.text + '" is really: ' + String(text).slice(0, 300), by: 'owner' });
+    live.setback(1);
+    mind.emit('update');
+    return { ok: true };
+  });
+  // 0.6: Tests screen.
+  ipcMain.handle('tests:run', async (_e, name) => {
+    const all = store.readState('core-tests', {});
+    const r = /^s[1-4]$/.test(name) ? await selftest.runBehaviour(name, { mind, live, journal }) : selftest.runMechanism(name);
+    if (!r) return null;
+    all[name] = r;
+    store.writeState('core-tests', all);
+    mind.emit('update');
+    return r;
+  });
   ipcMain.handle('folder:add', async () => {
     const r = await dialog.showOpenDialog(win, { title: 'Pick a folder ' + mind.state.name + ' may use', properties: ['openDirectory'] });
     if (r.canceled || !r.filePaths[0]) return { ok: false };
@@ -281,7 +355,7 @@ function setupIpc() {
     mind.moment('He made me forget something.', 'self');
     return mind.memory.forget(id);
   });
-  ipcMain.handle('memories:edit', (_e, id, text) => mind.memory.edit(id, text));
+  ipcMain.handle('memories:edit', (_e, id, text) => { const r = mind.memory.edit(id, text); live.setback(1); return r; });
   ipcMain.handle('memories:export', async () => {
     const r = await dialog.showSaveDialog(win, { title: 'Export memories', defaultPath: path.join(os.homedir(), 'ithil-memories.json') });
     if (r.canceled || !r.filePath) return false;
@@ -340,26 +414,27 @@ function setupIpc() {
     const opts = kind === 'live2d'
       ? { title: 'Pick a Live2D model folder (with a .model3.json)', properties: ['openDirectory'] }
       : kind === 'vrm' ? { title: 'Pick a VRM file', properties: ['openFile'], filters: [{ name: 'VRM model', extensions: ['vrm'] }] }
+      : kind === 'any3d' ? { title: 'Pick a 3D model (.glb, .gltf, .vrm) or a Live2D .model3.json', properties: ['openFile'], filters: [{ name: '3D or Live2D', extensions: ['glb', 'gltf', 'vrm', 'json'] }] }
       : { title: 'Pick a VRM file or a Live2D .model3.json', properties: ['openFile'], filters: [{ name: 'VRM or Live2D', extensions: ['vrm', 'json'] }] };
     const r = await dialog.showOpenDialog(win, opts);
     if (r.canceled || !r.filePaths[0]) return { ok: false };
     try {
       const p = r.filePaths[0];
-      const m = /\.vrm$/i.test(p) ? models.importVrm(p) : models.importLive2d(p);
+      const m = /\.vrm$/i.test(p) ? models.importVrm(p) : /\.(glb|gltf)$/i.test(p) ? models.importGltf(p) : models.importLive2d(p);
       if (m.kind === 'live2d') { try { await models.ensureCubismCore(); } catch (e) { return { ok: true, model: m, warn: e.message }; } }
-      settings.setByUser({ avatar: { bodyType: m.kind, modelId: m.id } });
+      signedSet({ avatar: { bodyType: m.kind, modelId: m.id } });
       mind.moment('He gave me a new body: ' + m.name + '.', 'self');
       mind.emit('update');
       return { ok: true, model: m };
     } catch (e) { return { ok: false, reason: String(e.message || e) }; }
   });
   ipcMain.handle('models:use', async (_e, id) => {
-    if (id === 'drawn' || id === 'orb') settings.setByUser({ avatar: { bodyType: id } });
+    if (id === 'drawn' || id === 'orb') signedSet({ avatar: { bodyType: id } });
     else {
       const m = models.get(id);
       if (!m) return { ok: false };
       if (m.kind === 'live2d') { try { await models.ensureCubismCore(); } catch (e) { return { ok: false, reason: e.message }; } }
-      settings.setByUser({ avatar: { bodyType: m.kind, modelId: m.id } });
+      signedSet({ avatar: { bodyType: m.kind, modelId: m.id } });
     }
     mind.emit('update');
     return { ok: true };
@@ -370,7 +445,7 @@ function setupIpc() {
     const r = await dialog.showMessageBox(win, { type: 'question', buttons: ['Remove', 'Keep'], defaultId: 1, cancelId: 1, message: 'Remove ' + m.name + ' from Hearth AI?', detail: 'This removes Hearth AI\u2019s copy. Your original file stays where it is.' });
     if (r.response !== 0) return false;
     models.remove(id);
-    if (settings.get().avatar.modelId === id) settings.setByUser({ avatar: { modelId: null } });
+    if (settings.get().avatar.modelId === id) signedSet({ avatar: { modelId: null } });
     mind.emit('update');
     return true;
   });
@@ -437,7 +512,7 @@ async function takeShots(dir) {
   const wait = (ms) => new Promise((r) => setTimeout(r, ms));
   win.show();
   await wait(3000);
-  const screens = ['mind', 'talk', 'avatar', 'attention', 'voices', 'body', 'dreams', 'free', 'memories', 'selfcheck', 'self', 'settings'];
+  const screens = ['talk', 'avatar', 'mind', 'memory', 'mood', 'journal', 'gate', 'tests', 'settings'];
   for (const sc of screens) {
     win.webContents.send('navigate', sc);
     await wait(sc === 'avatar' || sc === 'talk' ? 9000 : 1500);

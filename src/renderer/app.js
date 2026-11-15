@@ -4,9 +4,12 @@
 const H = window.hearth;
 const $ = (sel, el) => (el || document).querySelector(sel);
 const esc = (v) => String(v == null ? '' : v).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-const ui = { snap: null, screen: 'mind', built: null, memFilter: 'all', memQuery: '', memList: null, editingAbout: false, recording: null, lastSpoken: null, autoSpeak: false, models: [], checkpoints: [] };
+const ui = { snap: null, screen: 'talk', built: null, memFilter: 'all', memQuery: '', memList: null, editingAbout: false, recording: null, lastSpoken: null, autoSpeak: false, models: [], checkpoints: [] };
 
-const SCREENS = ['mind', 'talk', 'avatar', 'attention', 'voices', 'body', 'dreams', 'free', 'memories', 'selfcheck', 'self', 'settings'];
+// 0.6: the team's nine screens (nx.js); her older screens are folded inside them (NX.FOLD).
+const SCREENS = NX.SCREENS;
+// Is this older screen showing right now (on its own new screen, or folded into one)?
+function on(old) { return ui.screen === old || (NX.FOLD[ui.screen] || []).includes(old); }
 const ICON_MIC = '<svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="11" rx="3"></rect><path d="M5 11a7 7 0 0 0 14 0"></path><path d="M12 18v3"></path></svg>';
 const ICON_PLAY = '<svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"></path></svg>';
 
@@ -568,6 +571,8 @@ const parts = {
   }
 };
 
+window.__oldParts = parts;
+
 /* ---------------- helpers ---------------- */
 function fmtSecs(n) { return n < 90 ? n + ' seconds' : Math.round(n / 60) + ' min'; }
 function fmtMins(m) { return m % 60 === 0 ? (m / 60) + (m === 60 ? ' hour' : ' hours') : m + ' minutes'; }
@@ -595,7 +600,7 @@ function stageSpot(s) {
   const av = s.avatar.settings;
   if (ui.screen === 'avatar') return { host: 'avatar-host', camera: av.camera || 'full', interactive: true };
   if (ui.screen === 'talk' && av.places.talk) return { host: 'talk-host', camera: 'upper', interactive: false };
-  if (ui.screen === 'mind' && av.places.mind) return { host: 'mind-face-host', camera: 'face', interactive: false };
+  if (on('mind') && av.places.mind) return { host: 'mind-face-host', camera: 'face', interactive: false };
   return null;
 }
 
@@ -655,13 +660,18 @@ function render() {
   if (!s) return;
   const content = $('#content');
   if (ui.built !== ui.screen) {
-    content.innerHTML = shells[ui.screen](s);
+    // The new screen first, then her older screens folded under it (their own headings and cards).
+    content.innerHTML = NX.shells[ui.screen](s) + (NX.FOLD[ui.screen] || []).map((o) => '<section class="fold" data-fold="' + o + '">' + shells[o](s) + '</section>').join('');
+    for (const x of content.querySelectorAll('.fold section.stage')) x.remove();   // her body shows in the new Avatar preview
     ui.built = ui.screen;
     afterBuild(s);
   }
-  const ps = parts[ui.screen] || {};
+  const ps = NX.parts[ui.screen] || {};
+  const tp = NX.top(s);
+  for (const k of Object.keys(tp)) { const el = $('[data-part="' + k + '"]'); if (el && el._html !== tp[k]) { el.innerHTML = tp[k]; el._html = tp[k]; } }
   for (const el of content.querySelectorAll('[data-part]')) {
-    const fn = ps[el.getAttribute('data-part')];
+    const fold = el.closest('[data-fold]');
+    const fn = fold ? (parts[fold.getAttribute('data-fold')] || {})[el.getAttribute('data-part')] : ps[el.getAttribute('data-part')];
     if (!fn) continue;
     if (el.contains(document.activeElement) && document.activeElement.tagName === 'INPUT') continue;
     const html = fn(s);
@@ -673,8 +683,10 @@ function render() {
       if (msgs && (atBottom || !el._scrolled)) { el.scrollTop = el.scrollHeight; el._scrolled = true; }
     }
   }
-  for (const a of document.querySelectorAll('.side a')) {
-    if (a.getAttribute('data-nav') === ui.screen) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current');
+  for (const b of document.querySelectorAll('#nav button[data-s]')) {
+    const cur = b.getAttribute('data-s') === ui.screen;
+    b.classList.toggle('on', cur);
+    if (cur) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current');
   }
   const cc = $('[data-part="ccbox"]');
   if (cc) { cc.textContent = 'AI Command Center: ' + s.commandCenter; cc.style.borderStyle = s.commandCenter === 'connected' ? 'solid' : 'dashed'; cc.style.color = s.commandCenter === 'connected' ? 'var(--sage-l)' : ''; }
@@ -688,12 +700,12 @@ function render() {
 }
 
 function afterBuild(s) {
-  if (ui.screen === 'self') {
+  if (on('self')) {
     $('#ai-name').value = s.name;
     $('#ai-personality').value = s.selfRules.personality;
   }
-  if (ui.screen === 'avatar') { $('#let-suggest').checked = !!s.avatar.settings.letHerSuggest; $('#smooth-motion').checked = s.avatar.settings.smooth !== false; }
-  if (ui.screen === 'settings') {
+  if (on('avatar')) { $('#let-suggest').checked = !!s.avatar.settings.letHerSuggest; $('#smooth-motion').checked = s.avatar.settings.smooth !== false; }
+  if (on('settings')) {
     for (const el of document.querySelectorAll('[data-set]')) {
       const v = getPath(s.settings, el.getAttribute('data-set'));
       if (el.type === 'checkbox') el.checked = !!v; else el.value = v == null ? '' : v;
@@ -702,7 +714,8 @@ function afterBuild(s) {
     H.listCheckpoints().then((m) => { $('#ckpt-list').innerHTML = m.map((x) => '<option value="' + esc(x) + '">').join(''); });
     if (ui.anchor) { const el = document.getElementById(ui.anchor); if (el) el.scrollIntoView(); ui.anchor = null; }
   }
-  if (ui.screen === 'memories') loadMemories();
+  if (on('memories')) loadMemories();
+  NX.afterBuild(ui.screen, s);
   if (ui.screen === 'talk') {
     const ta = $('#talk-input');
     if (ui.prefill) { ta.value = ui.prefill; ui.prefill = null; }
@@ -811,7 +824,8 @@ async function sendTalk(text, byVoice) {
 
 /* ---------------- events ---------------- */
 function go(screen, anchor) {
-  if (!SCREENS.includes(screen)) screen = 'mind';
+  if (NX.ALIAS[screen]) screen = NX.ALIAS[screen];
+  if (!SCREENS.includes(screen)) screen = 'talk';
   ui.screen = screen; ui.anchor = anchor || null;
   if (location.hash !== '#' + screen) history.replaceState(null, '', '#' + screen);
   render();
@@ -819,8 +833,8 @@ function go(screen, anchor) {
 }
 
 document.addEventListener('click', async (e) => {
-  const nav = e.target.closest('.side a[data-nav]');
-  if (nav) { e.preventDefault(); go(nav.getAttribute('data-nav')); return; }
+  const nav = e.target.closest('#nav button[data-s]');
+  if (nav) { e.preventDefault(); go(nav.getAttribute('data-s')); return; }
   const el = e.target.closest('[data-act]');
   if (!el) return;
   const act = el.getAttribute('data-act'), v = el.getAttribute('data-v'), id = el.getAttribute('data-id');
@@ -924,14 +938,14 @@ document.addEventListener('input', (e) => {
 });
 
 function rebuild() { ui.built = null; }
-async function refresh() { ui.snap = await H.snapshot(); if (ui.screen === 'avatar' && document.activeElement && document.activeElement.matches('[data-avfield]')) return; render(); }
+async function refresh() { ui.snap = await H.snapshot(); if (on('avatar') && document.activeElement && document.activeElement.matches('[data-avfield]')) return; render(); }
 
-H.onSnapshot((s) => { ui.snap = s; if (ui.screen === 'memories' && Date.now() - (ui._memAt || 0) > 15000) { ui._memAt = Date.now(); loadMemories(); } render(); });
+H.onSnapshot((s) => { ui.snap = s; if (on('memories') && Date.now() - (ui._memAt || 0) > 15000) { ui._memAt = Date.now(); loadMemories(); } render(); });
 H.onNavigate((screen) => go(screen));
 window.addEventListener('hashchange', () => go(location.hash.slice(1)));
 
 (async () => {
   ui.snap = await H.snapshot();
-  go(location.hash.slice(1) || 'mind');
+  go(location.hash.slice(1) || 'talk');
   if (ui.snap.update && ui.snap.update.state === 'ready') { const b = $('[data-part="installbtn"]'); if (b) b.hidden = false; }
 })();

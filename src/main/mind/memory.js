@@ -21,7 +21,9 @@ class Memory {
     this.brain = brain;
     this.journal = journal || null;   // 0.5: the event log (core/journal.js)
   }
-  all() { return this.store.memories.items; }
+  // Hidden ones (he pressed Mark deleted) stay on disk but she doesn't use them until he restores them.
+  all() { return this.store.memories.items.filter((m) => !m.hidden); }
+  setHiddenByOwner(id, hidden) { const it = this.store.memories.update(id, { hidden: !!hidden }); this.store.memories.save(); return it; }
   async remember(m) {
     const item = {
       id: newId('mem'),

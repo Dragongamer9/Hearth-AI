@@ -80,7 +80,8 @@ function snapshot(mind, extra) {
   const recentMem = store.memories.items.slice(-3).reverse().map((m) => ({ kind: KINDS[m.kind] || m.kind, text: m.text }));
 
   // ---------- Talk ----------
-  const chat = store.chat.items.slice(-120).map((m) => ({ id: m.id, at: m.at, role: m.role, text: m.text, thinking: m.thinking || '', error: !!m.error }));
+  const chat = store.chat.items.slice(-120).map((m) => ({ id: m.id, at: m.at, role: m.role, text: m.text, thinking: m.thinking || '', error: !!m.error, from: m.from || null,
+    tags: m.tags || [], event: m.event || null, mood: m.mood || '', energy: m.energy == null ? null : m.energy, rule: !!m.rule, limit: m.limit || '', effect: m.effect || '', request: m.request || '', unprompted: !!m.unprompted }));
   const lastIthil = store.chat.items.slice().reverse().find((m) => m.role === 'ithil' && !m.error);
   const sessionStart = (() => {
     const items = store.chat.items;

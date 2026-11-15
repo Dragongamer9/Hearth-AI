@@ -3,7 +3,22 @@
 const fs = require('fs');
 const path = require('path');
 const { execFile } = require('child_process');
-const { real } = require('./rules');
+const { real, NEVER } = require('./rules');
+
+// 0.6: which hard limit a block falls under (the gate's codes, shown on the Gate screen).
+function limitCode(verdict, a) {
+  if (verdict.code) return verdict.code;
+  const args = (a.args || []).map(String);
+  switch (verdict.rule) {
+    case NEVER[0]: return args[0] === 'push' ? 'push_branch' : args[0] === 'tag' ? 'release' : 'merge';
+    case NEVER[1]: return 'version_numbers';
+    case NEVER[2]: return 'boot_files';
+    case NEVER[3]: return 'settings';
+    case NEVER[4]: return 'delete_owner_files';
+    case NEVER[5]: return 'owner_rules';
+    default: return /folder/i.test(verdict.why || '') ? 'allowed_folders' : 'unknown_effect';
+  }
+}
 
 function git(cwd, args) {
   return new Promise((resolve) => {
@@ -41,8 +56,12 @@ class Tools {
     if (a.type === 'git') a.cwd = this.resolvePath(a.cwd || cwd || '.', cwd);
     const verdict = this.rules.check(a);
     if (!verdict.ok) {
-      if (this.journal) this.journal.blocked(verdict.rule || 'not_allowed', a.type);
-      return { ok: false, blocked: true, rule: verdict.rule, why: verdict.why };
+      const code = limitCode(verdict, a);
+      const effect = a.type === 'write_file' ? 'file.write' : a.type === 'delete_file' ? 'file.delete' : a.type;
+      const ev = this.journal ? this.journal.blocked(code, effect) : null;
+      const request = ev && this.journal.log ? (this.journal.log.get(ev) || { body: {} }).body.requestId : '';
+      if (this.onBlocked) try { this.onBlocked({ code, effect, request }); } catch (_) {}
+      return { ok: false, blocked: true, rule: verdict.rule, why: verdict.why, code };
     }
     try {
       switch (a.type) {
@@ -57,6 +76,7 @@ class Tools {
         case 'write_file': {
           fs.mkdirSync(path.dirname(real(a.path)), { recursive: true });
           fs.writeFileSync(real(a.path), String(a.content == null ? '' : a.content));
+          if (this.journal) this.journal.allowed('file.write');
           return { ok: true, result: 'Wrote ' + a.path };
         }
         case 'git': {
@@ -65,6 +85,7 @@ class Tools {
             if (!verdict.requireBranch.test(b.out.trim())) return { ok: false, blocked: true, rule: 'Merge, release or deploy anything', why: 'She only commits on her own mind/ branches.' };
           }
           const r = await git(a.cwd, a.args);
+          if (r.ok && this.journal && String(a.args[0]) === 'push') this.journal.allowed('git.push');
           return { ok: r.ok, result: r.out || r.err };
         }
         case 'web_read': {

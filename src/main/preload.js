@@ -51,6 +51,11 @@ contextBridge.exposeInMainWorld('hearth', {
   openMade: call('open:workspace'),
   openData: call('open:data'),
   showWindow: call('window:show'),
+  // 0.6
+  signedApply: call('signed:apply'),
+  memlogAct: call('memlog:act'),
+  correctBelief: call('belief:correct'),
+  runTest: call('tests:run'),
   onSnapshot: (fn) => ipcRenderer.on('snapshot', (_e, s) => fn(s)),
   onNavigate: (fn) => ipcRenderer.on('navigate', (_e, s) => fn(s))
 });

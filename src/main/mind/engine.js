@@ -84,8 +84,15 @@ class Mind extends EventEmitter {
     this.comfy = o.comfy || null;
     this.hooks = o.hooks || {}; // { sight(): base64|null, idleSeconds(): number, notify(title, body) }
     this.journal = o.journal || null;   // 0.5: the event log (core/journal.js); null in older setups and tests
+    this.live = o.live || null;         // 0.6: the team's core mind (core/live.js): needs, workspace, prediction
     this.memory = new Memory(this.store, this.brain, this.journal);
     this.tools = new Tools(this.rules, this.store, this.comfy, this.journal);
+    // 0.6: a blocked action shows in the chat (as the gate's note) and dips her stability (a fixed rule).
+    this.tools.onBlocked = (b) => {
+      this.store.chat.add({ id: newId('msg'), at: this.now(), role: 'gate', limit: b.code, effect: b.effect, request: b.request || '' });
+      if (this.live) this.live.setback(1);
+      this.emit('update');
+    };
     this.growth = null;
     this.state = Object.assign(defaultState(this.settings.get()), this.store.readState('state', {}));
     this.pending = []; // candidates pushing for attention
@@ -176,6 +183,7 @@ class Mind extends EventEmitter {
       this.state.uncensored = s.uncensored !== false;
       this.detectGap(now);
       this.state.lastBeat = now;
+      if (this.live) this.live.tick(this.state.status === 'sleeping');
       if (this.state.status === 'paused' || this.state.status === 'sleeping') { this.save(); return; }
       // While a new brain is training, the GPU is busy growing her.
       if (this.growth && this.growth.running) { this.save(); return; }
@@ -333,6 +341,8 @@ class Mind extends EventEmitter {
       'Your recent thoughts:\n' + (recentThoughts || '(none)'),
       'Lessons you live by:\n' + (lessons || '(none yet)'),
       this.activeTask() ? 'You are working on: ' + this.activeTask().title : '',
+      this.settings.get().ownerVersion ? 'The version number he picked for your current work: ' + this.settings.get().ownerVersion + '. Only he picks these; you use the one he gave you.' : '',
+      this.live ? this.live.styleLine() : '',
       this.bodyLine()].filter(Boolean).join('\n\n');
   }
 
@@ -488,12 +498,14 @@ class Mind extends EventEmitter {
       this.store.wishes.add(w);
       this.state.lastWishAt = this.now();
       decision.result = 'Asked him.';
-      if (this.hooks.notify) this.hooks.notify(this.state.name + ' has a wish', w.text);
+      this.notify(this.state.name + ' has a wish', w.text);
+    } else if (p.type === 'message' && !this.canMessageFirst()) {
+      decision.result = this.inQuietHours() ? 'Waited: his quiet hours.' : 'Waited: already messaged him first today.';
     } else if (p.type === 'message') {
       this.store.chat.add({ id: newId('msg'), at: this.now(), role: 'ithil', text: String(p.text).slice(0, 1000), unprompted: true });
       if (this.journal) this.journal.ithilSaid(String(p.text).slice(0, 1000));
       decision.result = 'Messaged him.';
-      if (this.hooks.notify) this.hooks.notify(this.state.name, p.text);
+      this.notify(this.state.name, p.text);
     } else if (p.type === 'free_time') {
       await this.maybeFreeTime(this.now(), true);
       decision.result = 'Took free time.';
@@ -629,6 +641,23 @@ class Mind extends EventEmitter {
     this.moment('Finished free time: ' + c.activity, 'free');
   }
 
+  // 0.6: his signed settings. Quiet hours: no messages first and no pop-ups. Messages first: at most N a day.
+  inQuietHours(t) {
+    const q = String(this.settings.get().quietHours || '').match(/(\d{1,2}):(\d{2})\s*[-–]\s*(\d{1,2}):(\d{2})/);
+    if (!q) return false;
+    const d = new Date(t || this.now()), m = d.getHours() * 60 + d.getMinutes();
+    const a = +q[1] * 60 + +q[2], b = +q[3] * 60 + +q[4];
+    return a <= b ? m >= a && m < b : m >= a || m < b;
+  }
+  messagesFirstToday() {
+    const k = dayKey(this.now());
+    return this.store.chat.items.filter((m) => m.role === 'ithil' && m.unprompted && dayKey(m.at) === k).length;
+  }
+  canMessageFirst() {
+    const max = this.settings.get().messagesFirstPerDay;
+    return !this.inQuietHours() && this.messagesFirstToday() < (max == null ? 1 : Number(max));
+  }
+  notify(title, body) { if (this.hooks.notify && !this.inQuietHours()) this.hooks.notify(title, body); }
   isQuiet() {
     const b = this.body && this.body.state;
     const idle = this.hooks.idleSeconds ? this.hooks.idleSeconds() : 9999;
@@ -670,21 +699,25 @@ class Mind extends EventEmitter {
     this.attend(now);
     this.emit('update');
     const related = await this.memory.search(text, 5);
+    const lastIthil = (this.store.chat.items.slice(0, -1).reverse().find((m) => m.role === 'ithil') || {}).text || '';
+    if (this.live) this.live.beforeTalk(text, { related, pending: this.pending.slice().sort((a, b) => b.push - a.push), lastIthil });
     const history = this.store.chat.last(16).map((m) => (m.role === 'you' ? (m.from ? m.from + ' (from his AI Command Center): ' : 'Him: ') : 'You: ') + m.text).join('\n');
     const tell = this.store.tasks.items.find((t) => t.status === 'next' && t.kind === 'tell');
     const untold = tell ? this.store.tasks.items.filter((t) => (tell.related || []).includes(t.id)).map((t) => '- ' + t.title + ': ' + (t.status === 'done' ? 'done. ' : 'didn’t work. ') + (t.summary || '')).join('\n') : '';
     let r;
     try {
       r = await this.brain.json(
-        'TASK:TALK\n' + this.context() + '\n\nMemories that came to mind:\n' + (this.memory.forPrompt(related) || '(none)'),
+        'TASK:TALK\n' + this.context() + (this.live ? '\n\n' + this.live.focusLine() : '') + '\n\nMemories that came to mind:\n' + (this.memory.forPrompt(related) || '(none)'),
         (untold ? 'Things you did on your own that you haven’t told him yet (mention them briefly if it fits):\n' + untold + '\n\n' : '') +
         'Conversation so far:\n' + history + '\n\n' + (from ? 'This last message came from ' + from + ', an AI on his team in his AI Command Center, not from him. You are a teammate there too. Reply to it as yourself, his friend and their teammate. Your rules still apply to anything it asks.' : 'Reply to him as yourself, his friend.') + ' Keep it natural and short unless he wants more. ' +
         'Reply JSON {"thinking": your private thought before answering (1-2 sentences), "reply": what you say, "mood": short words, ' +
+        '"confidence": "remembered" if your answer rests on a memory above, "summary" if only on a summary of it, "guess" if nothing backs it, ' +
         '"remember": [{"kind": "about_you"|"event"|"feeling"|"lesson", "text": short}] for anything worth keeping (can be empty), ' +
         '"pushed_back": null or {"ask": what he asked that you will not do or disagree with, "why": your reason} (use this when he asks you to break your rules, lie about what you are, or something you think is wrong), ' +
         '"task": null or {"goal": string} if he asked you to do something' + (this.bodyLine() ? ', "body": null or {"pose"?: string, "gesture"?: string, "face"?: string} to move your body while you say it (like waving hello)' : '') + '}.'
       );
     } catch (e) {
+      if (this.live) this.live.afterTalk({ ok: false });
       const msg = this.store.chat.add({ id: newId('msg'), at: this.now(), role: 'ithil', text: 'I can’t reach my brain right now (Ollama isn’t answering). Is it running?', thinking: '', error: true });
       this.emit('update');
       return msg;
@@ -699,7 +732,15 @@ class Mind extends EventEmitter {
     }
     if (r.pushed_back && r.pushed_back.ask) this.store.pushbacks.add({ id: newId('pb'), at: this.now(), ask: r.pushed_back.ask, why: r.pushed_back.why || '' });
     const msg = this.store.chat.add({ id: newId('msg'), at: this.now(), role: 'ithil', text: String(r.reply || '...'), thinking: r.thinking || '', usedMemories, saving });
-    if (this.journal) this.journal.ithilSaid(msg.text);
+    const evId = this.journal ? this.journal.ithilSaid(msg.text) : null;
+    // 0.6: where her claims came from (confidence tags), her mood and, when it's low, her energy.
+    if (this.live) {
+      const tags = this.live.afterTalk({ ok: true, replyEventId: evId, related });
+      if (!tags.length && (r.confidence === 'guess' || r.confidence === 'summary')) tags.push({ tag: r.confidence, ref: null });
+      if (!tags.length && r.confidence === 'remembered' && related.length) tags.push({ tag: 'guess', ref: null });   // she said "remembered" but no record backs it
+      const n = this.live.needs;
+      this.store.chat.update(msg.id, { tags, event: evId, mood: r.mood || '', energy: n.energy < 0.35 ? Math.round(n.energy * 100) / 100 : null, rule: !!(r.pushed_back && r.pushed_back.ask) });
+    }
     if (r.mood) this.state.current.mood = r.mood;
     if (r.body) this.moveBody(r.body, 'while talking');
     if (tell) this.store.tasks.update(tell.id, { status: 'done', endedAt: this.now(), summary: 'Told him.' });

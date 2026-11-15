@@ -23,9 +23,18 @@ const DEFAULTS = {
   growWhileSleeping: true,
   growEveryDays: 3,
   hfToken: '',
+  // 0.6: signed settings (Settings › Sign & apply). Empty quiet hours = none.
+  quietHours: '',
+  messagesFirstPerDay: 3,
+  pushBranch: '',
+  protectedPaths: '',
+  ownerVersion: '',
   senses: { hardware: true, time: true, hearing: true, sight: false, presence: false, body: true },
   avatar: {
     bodyType: 'vrm',
+    builtin: 'orb',          // 0.6: Moon orb, Crystal, Humanoid, Wisp, Lantern (bodyType 'builtin')
+    glow: 0,                 // 0.6: glow colour (index)
+    followMood: true,        // 0.6: motion and glow follow her needs
     modelId: null,
     camera: 'full',
     scene: 'moon',
@@ -42,7 +51,7 @@ const DEFAULTS = {
     accent: 'Hearth sage',
     letHerSuggest: true,
     voice: 'soft',
-    places: { talk: true, buddy: true, mind: true, commandCenter: false }
+    places: { talk: true, buddy: true, mind: true, topbar: true, commandCenter: false }
   }
 };
 

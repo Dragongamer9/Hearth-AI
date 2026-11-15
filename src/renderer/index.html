@@ -3,37 +3,47 @@
 <head>
 <meta charset="utf-8">
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' ithil: data: blob:; media-src 'self' blob: data:; style-src 'self' 'unsafe-inline'; script-src 'self' ithil: 'wasm-unsafe-eval'; font-src 'self'; connect-src 'self' ithil: data: blob:">
-<title>Hearth AI</title>
+<title>Ithil · Hearth AI</title>
 <link rel="stylesheet" href="fonts/fonts.css">
 <link rel="stylesheet" href="styles.css">
+<link rel="stylesheet" href="look.css">
 </head>
-<body>
-<div class="app">
-  <nav class="side" aria-label="Hearth AI">
-    <div class="brand"><span class="brand-orb" aria-hidden="true"></span><span class="brand-name">Hearth AI</span></div>
-    <a href="#mind" data-nav="mind">Mind</a>
-    <a href="#talk" data-nav="talk">Talk</a>
-    <a href="#avatar" data-nav="avatar">Avatar</a>
-    <div class="side-sep"></div>
-    <a href="#attention" data-nav="attention">Attention</a>
-    <a href="#voices" data-nav="voices">Inner voices</a>
-    <a href="#body" data-nav="body">Body &amp; senses</a>
-    <a href="#dreams" data-nav="dreams">Dreams</a>
-    <a href="#free" data-nav="free">Free time &amp; wishes</a>
-    <a href="#memories" data-nav="memories">Memories</a>
-    <div class="side-sep"></div>
-    <a href="#selfcheck" data-nav="selfcheck">Self-check</a>
-    <a href="#self" data-nav="self">Self &amp; rules</a>
-    <a href="#settings" data-nav="settings">Settings</a>
-    <div class="side-foot">
-      <div data-part="brainline">Brain: local model on your Nvidia PC (RTX 5070) · Ollama · offline</div>
-      <div class="cc-box" data-part="ccbox">AI Command Center: not connected</div>
-    </div>
-  </nav>
-  <div class="content" id="content"></div>
+<body class="nx">
+<!-- 0.6: the team's layout (docs/mockups/ithil-0.6). -->
+<div class="top">
+  <div class="logo"><canvas id="avTop" style="width:24px;height:24px" aria-hidden="true"></canvas><span data-part="topname">Ithil</span></div>
+  <span class="badge" data-part="topbadge">Hearth AI</span>
+  <span class="sp"></span>
+  <span class="tpill" data-part="topstatus"></span>
+  <span class="tpill" data-part="topgate"></span>
+  <span class="tpill" data-part="topfirsts"></span>
+  <span class="tpill" data-part="topquiet"></span>
 </div>
+<nav id="nav" aria-label="Ithil">
+  <div class="sec" data-part="navname">Ithil</div>
+  <button type="button" data-s="talk"><span class="ico">💬</span>Talk</button>
+  <button type="button" data-s="avatar"><span class="ico">✨</span>Avatar</button>
+  <button type="button" data-s="mind"><span class="ico">🧠</span>Mind</button>
+  <button type="button" data-s="memory"><span class="ico">📜</span>Memory</button>
+  <button type="button" data-s="mood"><span class="ico">🌗</span>Needs &amp; mood</button>
+  <button type="button" data-s="journal"><span class="ico">🌙</span>Journal &amp; sleep</button>
+  <div class="sec">Safety &amp; checks</div>
+  <button type="button" data-s="gate"><span class="ico">🛡️</span>Gate</button>
+  <button type="button" data-s="tests"><span class="ico">🧪</span>Tests</button>
+  <div class="sec owner">Owner only</div>
+  <button type="button" data-s="settings"><span class="ico">🔑</span>Settings</button>
+  <div class="navnote" data-part="navnote">Everything here comes from her event log.</div>
+  <div class="navfoot">
+    <div data-part="brainline">Brain: local model on your Nvidia PC · Ollama</div>
+    <div class="cc-box" data-part="ccbox">AI Command Center: not connected</div>
+  </div>
+</nav>
+<div id="content"></div>
+<div class="nmodal" id="nmodal"><div class="box" id="nmodal-box"></div></div>
 <audio id="voice-audio"></audio>
 <script src="vendor/stage.js"></script>
+<script src="avatars.js"></script>
+<script src="nx.js"></script>
 <script src="app.js"></script>
 </body>
 </html>
