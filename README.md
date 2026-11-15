@@ -52,9 +52,18 @@ Unit tests check the code on example data. For instance, "the gate blocks this l
 - An independent review of all the code.
 - The behaviour tests in `docs/ithil-tests.md` (memory questions, pushback test, pressure check, self-monitoring) on a running Ithil.
 
+## Prototype .deb
+
+GitHub Actions (`.github/workflows/deb.yml`) builds `ithil-prototype_<version>_all.deb` on every push and attaches it to the run as a download (no release, no tag). It installs files to `/opt/ithil` and two commands:
+- `ithil-selftest` runs the unit tests (needs Node.js 22.13 or newer)
+- `ithil-mockups [app|brain]` opens the mockups
+
+It does **not** give you an Ithil you can talk to yet. It adds no services, starts nothing and doesn't touch boot files. Remove it with `sudo apt remove ithil-prototype`.
+
 ## Files
 
 - `docs/`: character sheet, message-first and mood rules, tests, mind design, mockups
 - `ithil/`: the code
 - `test/`: unit tests
 - `.github/workflows/test.yml`: runs `npm test` on GitHub for every push
+- `.github/workflows/deb.yml` + `packaging/build-deb.sh`: builds the prototype .deb

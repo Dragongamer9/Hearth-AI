@@ -1,0 +1,30 @@
+name: deb package
+# Builds the prototype .deb and uploads it as a workflow artifact (a download
+# on the run page). It never creates a release or a tag.
+on:
+  push:
+  workflow_dispatch:
+jobs:
+  deb:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: npm test
+      - name: Build the .deb
+        run: bash packaging/build-deb.sh
+      - name: Install it on this clean machine and run its self-test
+        run: |
+          sudo dpkg -i dist/*.deb
+          dpkg -s ithil-prototype | grep -E '^(Package|Version|Status):'
+          ithil-selftest
+          test -f /opt/ithil/docs/mockups/ithil-app.html
+          sudo dpkg -r ithil-prototype
+          test ! -e /opt/ithil/ithil/gate.js
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ithil-prototype-deb
+          path: dist/*.deb
+          if-no-files-found: error
