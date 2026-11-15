@@ -51,7 +51,7 @@ export const LIMITS = Object.freeze({
 });
 
 export const EFFECTS = Object.freeze([
-  'message.send', 'log.write', 'selfmodel.update', 'sleep.write',
+  'message.send', 'log.write', 'selfmodel.update', 'sleep.write', 'mood.snapshot',
   'file.write', 'file.delete', 'git', 'settings.write',
 ]);
 
@@ -176,7 +176,10 @@ export class Gate {
       case 'log.write':
         return ITHIL_LOG_KINDS.has(d.kind) ? null : 'owner_rules';
       case 'selfmodel.update':
-        return RULE_FIELDS.has(d.field) ? 'owner_rules' : null;
+        if (RULE_FIELDS.has(d.field)) return 'owner_rules';
+        return typeof d.field === 'string' && d.field && d.reason ? null : 'owner_rules'; // a belief change needs a reason
+      case 'mood.snapshot':
+        return null; // written by the mind's fixed rules (system), never by the language model; the log checks the numbers
       case 'sleep.write':
         return SLEEP_KINDS.has(d.kind) ? null : 'owner_rules';
       case 'file.write': {
@@ -248,7 +251,9 @@ export class Gate {
         return this.log.append({ actor: 'ithil', kind: d.kind, body: d.body ?? null, ref: d.ref ?? null });
       case 'selfmodel.update':
         return this.log.append({ actor: 'ithil', kind: 'reflection',
-          body: { text: `${d.field}: ${d.value}`, field: d.field, reason: d.reason ?? null } });
+          body: { text: `${d.field}: ${d.value}`, field: d.field, value: d.value, reason: d.reason } });
+      case 'mood.snapshot':
+        return this.log.mood(d.values);
       case 'sleep.write':
         return d.kind === 'memory.forget'
           ? this.log.forget('system', d.ref)

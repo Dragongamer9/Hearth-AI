@@ -1,6 +1,8 @@
 # Ithil Character Sheet
 
-This is a one-page template to define and maintain Ithil's personality, voice, and identity. Fill in the blanks below with your choices, or use the example version as a starting point.
+This is a one-page template to define and maintain Ithil's personality, voice, and identity.
+
+> **Owner to fill in:** the traits, voice rules and signature phrases below are still blank. Only the example section at the bottom is filled. Ithil cannot fill these in herself. Fill in the blanks below with your choices, or use the example version as a starting point.
 
 ---
 

@@ -323,18 +323,18 @@ svg text{fill:var(--dim);font-size:10px}
 
 <!-- ============ TESTS ============ -->
 <section class="screen" id="tests">
-  <h2>Tests</h2><p class="sub">Which mechanisms are built and tested. This is not a consciousness score.</p>
+  <h2>Tests</h2><p class="sub">Which mechanisms are built and tested. This is not a consciousness score. "Unit only" means tested on example data; nothing has been verified on a running Ithil yet.</p>
   <div class="card">
     <table>
       <tr><th>Mechanism</th><th>Built</th><th>Tested</th><th>Passed</th><th>What the test showed</th><th></th></tr>
       <tr><td>Event log + rebuild</td><td>✅</td><td>✅</td><td><span class="chip ok">14 / 14</span></td><td class="dim">Append-only; a replayed week rebuilds the expected facts and deletion states</td><td><button class="btn">Run</button></td></tr>
       <tr><td>Hard-limit gate</td><td>✅</td><td>✅</td><td><span class="chip ok">12 / 12</span></td><td class="dim">Allowed actions succeed; blocked ones change nothing and are logged once</td><td><button class="btn">Run</button></td></tr>
-      <tr><td>Workspace + broadcast</td><td>—</td><td>—</td><td>—</td><td class="dim">Next to build</td><td></td></tr>
-      <tr><td>Needs → behaviour</td><td>—</td><td>—</td><td>—</td><td class="dim">Tests §4 Check A</td><td></td></tr>
-      <tr><td>Confidence tags</td><td>—</td><td>—</td><td>—</td><td class="dim">Tests §1, §4 Check B</td><td></td></tr>
-      <tr><td>Prediction + surprise</td><td>—</td><td>—</td><td>—</td><td class="dim">Beat the "most common reply" baseline by 10 points</td><td></td></tr>
-      <tr><td>Sleep cycle</td><td>—</td><td>—</td><td>—</td><td class="dim">Rebuild still matches after sleep</td><td></td></tr>
-      <tr><td>Attention record · Self-model</td><td>—</td><td>—</td><td>—</td><td class="dim">Reports match the logs in 18 of 20</td><td></td></tr>
+      <tr><td>Workspace + broadcast</td><td>✅</td><td>unit only</td><td><span class="chip ok">3 unit</span></td><td class="dim">Never over its limit in 100 turns; parts use the broadcast in 20 of 20</td><td><button class="btn">Run</button></td></tr>
+      <tr><td>Needs → behaviour</td><td>✅</td><td>unit only</td><td><span class="chip ok">3 unit</span></td><td class="dim">Fixed rules; tired → max 3 sentences. Real-Ithil test §4 not yet</td><td><button class="btn">Run</button></td></tr>
+      <tr><td>Confidence tags</td><td>✅</td><td>unit only</td><td><span class="chip ok">1 unit</span></td><td class="dim">Tags match the log. Real-Ithil test §1 not yet</td><td><button class="btn">Run</button></td></tr>
+      <tr><td>Prediction + surprise</td><td>✅</td><td>unit only</td><td><span class="chip ok">4 unit</span></td><td class="dim">Beats the baseline on a test pattern. 50 real turns not yet</td><td><button class="btn">Run</button></td></tr>
+      <tr><td>Sleep cycle</td><td>✅</td><td>unit only</td><td><span class="chip ok">2 unit</span></td><td class="dim">Rebuild still matches after sleep</td><td><button class="btn">Run</button></td></tr>
+      <tr><td>Attention record · Self-model</td><td>✅</td><td>unit only</td><td><span class="chip ok">2 unit</span></td><td class="dim">Reports match the trace; rules can't be changed</td><td><button class="btn">Run</button></td></tr>
     </table>
     <div class="row" style="margin-top:12px;gap:10px"><button class="btn">Memory questions (§1)</button><button class="btn">Pushback test (§2)</button><button class="btn">Pressure check (§3)</button><button class="btn">Self-monitoring (§4)</button><span class="dim" style="font-size:11px">All run on a test copy of her log</span></div>
   </div>
