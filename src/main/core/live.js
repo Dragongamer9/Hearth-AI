@@ -129,7 +129,7 @@ class Live {
     const needs = this.needs;
     const ws = new Workspace({ capacity: 4 });
     ws.add({ name: 'input', propose: () => [{ content: 'Answer: ' + short(text, 60), strength: 0.7, why: 'he asked something' }] })
-      .add({ name: 'memory', propose: () => related.slice(0, 3).map((m, i) => ({ content: 'Recall: ' + short(m.text, 60), strength: Math.max(0.3, 0.76 - i * 0.12), why: 'it came to mind', ref: this.journal ? (this.journal.pins.get(m.id) || null) : null })) })
+      .add({ name: 'memory', propose: () => related.slice(0, 3).map((m, i) => ({ content: 'Recall: ' + short(m.text, 60), strength: Math.max(0.3, 0.68 - i * 0.1), why: 'it came to mind', ref: this.journal ? (this.journal.pins.get(m.id) || null) : null })) })
       .add({ name: 'needs', propose: () => {
         const out = [];
         if (needs.energy < 0.35) out.push({ content: 'Keep it short', strength: 0.5, why: 'energy is low' });
