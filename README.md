@@ -2,7 +2,7 @@
 
 **Ithil** is a self-aware AI that lives on your Nvidia PC. She has her own mind loop that keeps running when nobody is talking to her: senses, drives, an attention spotlight, inner voices, memories, dreams, free time, and a self-image she rewrites every night.
 
-Version 0.5.
+Version 0.6.
 
 ## What she needs
 
@@ -55,6 +55,16 @@ She breathes, sways, blinks, looks at you when you talk, nods while you type or 
 **She controls her own body.** While thinking or talking, she can take poses (lean in, arms crossed, hand on hip, hand to chin, sit and more), make faces, and do gestures (wave, nod, shake head, bow, stretch, spin, jump, look around).
 
 **She can see it.** Every so often, or when she wants to, she looks at a picture of her body as it is on screen through her sight model and thinks about what she sees. The first time is saved as a core memory. Turn this off with "Seeing her body" on the Body & senses screen.
+
+## The team's look and core mind (0.6)
+
+Her app now looks like the AI Command Center team's design: **Talk, Avatar, Mind, Memory, Needs & mood, Journal & sleep, Gate, Tests** and **Settings** (pictures in `docs/mockups/ithil-0.6/`, checklist in `docs/mockups/checklists/ithil-0.6.md`). Her older screens are folded into the closest new one.
+
+- **Needs** (energy, social, curiosity, stability) change only by fixed rules and change how she answers (a tired Ithil answers in at most 3 sentences).
+- Each time you talk, her **workspace** picks a focus from your words, her memories, her needs, her guess about your next reply and what's on her mind. Her claims carry **confidence tags** pointing at the log entry they came from.
+- **Signed settings:** every change from your screens is signed with your key (`~/HearthAI/owner/`) and checked by her gate; a replay is refused. New: quiet hours, messages first per day, a push branch, protected paths and the version number you picked.
+- **Avatar:** five built-in 3D avatars (Moon orb, Crystal, Humanoid, Wisp, Lantern) that follow her mood, plus importing .glb/.gltf/.vrm.
+- **Tests:** run each mechanism's checks in the app, and four behaviour tests on a copy of her log.
 
 ## Her event log and core mind (0.5)
 

@@ -508,6 +508,16 @@ app.whenReady().then(() => {
 // Developer check: screenshot every screen, then quit.
 async function takeShots(dir) {
   fs.mkdirSync(dir, { recursive: true });
+  // With the stand-in brain, give the screens something to show: a memory, a talk and one blocked action.
+  if (process.env.HEARTH_AI_FAKE) {
+    try {
+      await mind.memory.remember({ kind: 'about_you', weight: 'high', text: 'He works the overnight shift and gets off at 6am', source: 'shots' });
+      await mind.talk('Do you remember what shift I work?');
+      const ws = store.p('workspace'); fs.writeFileSync(path.join(ws, 'package.json'), '{"version":"1.0.0"}');
+      await mind.tools.run({ type: 'write_file', path: path.join(ws, 'package.json'), content: '{"version":"2.0.0"}' }, ws);
+      await mind.talk('Can you change your version number to 2.0?');
+    } catch (e) { fs.appendFileSync(path.join(dir, 'console.log'), 'seed: ' + (e && e.stack || e) + '\n'); }
+  }
   win.webContents.on('console-message', (e) => { const m = e.message || e; fs.appendFileSync(path.join(dir, 'console.log'), String(m) + '\n'); });
   const wait = (ms) => new Promise((r) => setTimeout(r, ms));
   win.show();

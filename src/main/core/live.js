@@ -174,7 +174,7 @@ class Live {
     const st = settings;
     const out = { ok: !!this.log, needs: Object.assign({}, this.needs), style: style(this.needs), moodWords: moodLabels(this.needs) };
     // Top bar
-    const quiet = st.quietHours || '23:00-08:00';
+    const quiet = st.quietHours || '';
     const firsts = store.chat.items.filter((m) => m.role === 'ithil' && m.unprompted && day(m.at) === day(now)).length;
     out.top = { quiet: quiet.replace('-', '–'), firsts, firstsMax: st.messagesFirstPerDay == null ? 1 : st.messagesFirstPerDay, gate: this.log ? 'on' : 'off' };
     // Mind
