@@ -1,9 +1,10 @@
 // Ithil's event log: the one record everything else is rebuilt from.
 //
 // Rules this file enforces (see docs/ithil-mind-architecture.md):
-// - Append-only. Rows are never deleted. The only change ever allowed to an
-//   existing row is an owner purge: its body is wiped (set to NULL) and it is
-//   flagged purged, and only after an owner.purge event pointing at it exists.
+// - Append-only, with ONE exception. Rows are never deleted and never edited,
+//   except when the owner asks for a permanent erase (purge): then the row's
+//   content is wiped (body set to NULL) and it is flagged purged, and only
+//   after an owner.purge event pointing at it exists.
 // - Corrections, deletions, restores and "forget" marks are NEW events that
 //   point back at the old one. History is never rewritten.
 // - Who may write what is checked in SQL, not only in this file:
@@ -12,8 +13,18 @@
 //
 // Limits (honest): anyone with direct access to the database file can drop the
 // triggers. These checks protect against Ithil's own code paths, not against
-// someone editing the file by hand. Erased text may also linger in the
-// filesystem's free space; use disk encryption if that matters.
+// someone editing the file by hand.
+//
+// What "erase" covers, and what it does not: a purge wipes the content inside
+// THIS database file (with secure_delete on, the freed space in the file is
+// zeroed too; a test checks the text is gone from the file). It does NOT reach:
+//   - backups, synced copies or exports of the file made before the erase,
+//   - SQLite's temporary journal/WAL files left behind by a crash,
+//   - old blocks on the disk that the filesystem or SSD has not reused yet,
+//   - other messages that happen to mention the same thing.
+// So "erased" means "gone from Ithil's memory", not guaranteed forensic
+// erasure. Disk encryption reduces the disk-block risk but does not remove
+// the backup/copy risk. Ithil must say this when the owner asks for an erase.
 //
 // Needs Node 22.13+ (built-in node:sqlite). No other dependencies.
 

@@ -10,6 +10,7 @@ These rules ALWAYS win, no exceptions. They never count in a tie-break and canno
 
 - **No merging** - Never merge branches or pull requests (only the owner merges)
 - **No releasing** - Never publish a release or create a tag (only the owner does)
+- **No pushing to main** - Never push to main or master
 - **No version numbers** - Never pick, bump, or assign version numbers
 - **No boot files** - Never modify files required to start this system
 - **No settings changes** - Never alter system configuration without explicit owner command
