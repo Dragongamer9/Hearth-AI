@@ -1,8 +1,10 @@
 name: Screenshots
 
 # Runs her app with a stand-in brain (HEARTH_AI_FAKE) and saves a picture of every screen
-# to the ci/screenshots-out branch. Only when asked (Actions › Screenshots › Run workflow).
+# to the ci/screenshots-out branch. Only when asked: push to ci/screenshots (or Run workflow).
 on:
+  push:
+    branches: ['ci/screenshots']
   workflow_dispatch:
 
 permissions:
