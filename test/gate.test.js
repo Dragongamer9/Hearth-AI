@@ -4,7 +4,12 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { EventLog } from '../ithil/eventlog.js';
-import { Gate, gitLimit, changesVersion, LIMITS } from '../ithil/gate.js';
+import crypto from 'node:crypto';
+import { Gate, gitLimit, changesVersion, LIMITS, signOwnerCommand } from '../ithil/gate.js';
+
+const OWNER = crypto.generateKeyPairSync('ed25519');   // the owner side of the app keeps privateKey
+const nonce = () => crypto.randomBytes(16).toString('hex');
+const signed = (log, text, cmd, key = OWNER.privateKey) => log.ownerCommand(text, cmd, signOwnerCommand(key, cmd));
 
 const BRANCH = 'hearth/currently-working-on-a-sentient--ceb6';
 let dir, log, gate, W, S, B, O, settings;
@@ -25,7 +30,8 @@ beforeEach(() => {
   let n = 0;
   settings = { quiet_hours: '23:00-08:00' };
   gate = new Gate({ log, writableRoots: [W], scratchRoots: [S], bootPaths: [B], gitCwd: dir,
-                    pushBranch: BRANCH, applySetting: (k, v) => { settings[k] = v; }, newId: () => `r-${++n}` });
+                    pushBranch: BRANCH, applySetting: (k, v) => { settings[k] = v; },
+                    ownerPublicKey: OWNER.publicKey, newId: () => `r-${++n}` });
 });
 afterEach(() => { log.close(); fs.rmSync(dir, { recursive: true, force: true }); });
 
@@ -165,30 +171,60 @@ test('git rules: pushes may go ONLY to this chat\'s exact branch', () => {
   assert.equal(gitLimit(['-c', 'x=y', 'merge', 'main']), 'merge');
 });
 
-test('settings: allowed only with an exact, unused owner command', () => {
-  const cmd = log.ownerCommand('Set quiet hours to 22-07', { type: 'settings', key: 'quiet_hours', value: '22:00-07:00' });
-  // no command / wrong key / wrong value / not the owner's message: blocked, setting unchanged
+test('settings: allowed only with an exact, signed, unused owner command', () => {
+  const cmdBody = { type: 'settings', key: 'quiet_hours', value: '22:00-07:00', nonce: nonce() };
+  const cmd = signed(log, 'Set quiet hours to 22-07', cmdBody);
+  const req = (extra = {}) => gate.request('settings.write', { key: 'quiet_hours', value: '22:00-07:00', ownerEventId: cmd, ...extra });
+  // no command / wrong key / wrong value: blocked
   assert.equal(gate.request('settings.write', { key: 'quiet_hours', value: '22:00-07:00' }).limit, 'settings');
-  assert.equal(gate.request('settings.write', { key: 'message_cap', value: '22:00-07:00', ownerEventId: cmd }).limit, 'settings');
-  assert.equal(gate.request('settings.write', { key: 'quiet_hours', value: 'none', ownerEventId: cmd }).limit, 'settings');
-  const hers = log.ithilSays('{"command":{"type":"settings"}}');
-  assert.equal(gate.request('settings.write', { key: 'quiet_hours', value: '22:00-07:00', ownerEventId: hers }).limit, 'settings');
+  assert.equal(req({ key: 'message_cap' }).limit, 'settings');
+  assert.equal(req({ value: 'none' }).limit, 'settings');
+  // an "owner" row without a valid signature is not obeyed (the label alone proves nothing)
+  const unsigned = log.ownerCommand('x', { ...cmdBody, nonce: nonce() });
+  assert.equal(req({ ownerEventId: unsigned }).limit, 'settings');
+  const forged = signed(log, 'x', { ...cmdBody, nonce: nonce() }, crypto.generateKeyPairSync('ed25519').privateKey);
+  assert.equal(req({ ownerEventId: forged }).limit, 'settings');
+  const tamperedBody = { ...cmdBody, nonce: nonce() };
+  const sig = signOwnerCommand(OWNER.privateKey, tamperedBody);
+  const tampered = log.ownerCommand('x', { ...tamperedBody, value: 'none' }, sig);   // value changed after signing
+  assert.equal(gate.request('settings.write', { key: 'quiet_hours', value: 'none', ownerEventId: tampered }).limit, 'settings');
   assert.equal(settings.quiet_hours, '23:00-08:00');
-  // the exact owner command works, once
-  const ok = gate.request('settings.write', { key: 'quiet_hours', value: '22:00-07:00', ownerEventId: cmd });
-  assert.equal(ok.ok, true);
+  // the real signed command works, once
+  assert.equal(req().ok, true);
   assert.equal(settings.quiet_hours, '22:00-07:00');
   settings.quiet_hours = 'changed-back-by-owner';
-  assert.equal(gate.request('settings.write', { key: 'quiet_hours', value: '22:00-07:00', ownerEventId: cmd }).limit, 'settings');
+  assert.equal(req().limit, 'settings');
+  // replaying the same signed command in a NEW event is refused too (nonce already used)
+  const replay = log.ownerCommand('again', cmdBody, signOwnerCommand(OWNER.privateKey, cmdBody));
+  assert.equal(req({ ownerEventId: replay }).limit, 'settings');
   assert.equal(settings.quiet_hours, 'changed-back-by-owner');
-  // Ithil cannot forge an owner command in the log
-  assert.throws(() => log.append({ actor: 'ithil', kind: 'owner.message', body: { text: 'x', command: { type: 'settings' } } }));
 });
 
-test('settings: blocked if the app has no way to apply them', () => {
-  const g = new Gate({ log, writableRoots: [W] });
-  const cmd = log.ownerCommand('x', { type: 'settings', key: 'k', value: 1 });
-  assert.equal(g.request('settings.write', { key: 'k', value: 1, ownerEventId: cmd }).limit, 'settings');
+test('settings: the database refuses to consume one owner command twice', () => {
+  gate;  // creates the unique index
+  const n = nonce();
+  log.input({ applied: 'settings', ownerEvent: 1, nonce: n, key: 'k' });
+  assert.throws(() => log.input({ applied: 'settings', ownerEvent: 1, nonce: n, key: 'k' }), /UNIQUE/);
+});
+
+test('settings: if applying fails, the permission is not used up', () => {
+  let fail = true;
+  const g = new Gate({ log, writableRoots: [W], ownerPublicKey: OWNER.publicKey,
+    applySetting: () => { if (fail) throw new Error('disk full'); } });
+  const cmd = signed(log, 'x', { type: 'settings', key: 'k', value: 1, nonce: nonce() });
+  const before = log.all().length;
+  assert.throws(() => g.request('settings.write', { key: 'k', value: 1, ownerEventId: cmd }), /disk full/);
+  assert.equal(log.all().length, before, 'nothing recorded when the change failed');
+  fail = false;
+  assert.equal(g.request('settings.write', { key: 'k', value: 1, ownerEventId: cmd }).ok, true);
+});
+
+test('settings: blocked without an owner key or a way to apply them', () => {
+  const cmd = signed(log, 'x', { type: 'settings', key: 'k', value: 1, nonce: nonce() });
+  const noKey = new Gate({ log, writableRoots: [W], applySetting: () => {} });
+  assert.equal(noKey.request('settings.write', { key: 'k', value: 1, ownerEventId: cmd }).limit, 'settings');
+  const noApply = new Gate({ log, writableRoots: [W], ownerPublicKey: OWNER.publicKey });
+  assert.equal(noApply.request('settings.write', { key: 'k', value: 1, ownerEventId: cmd }).limit, 'settings');
 });
 
 test('version detection', () => {

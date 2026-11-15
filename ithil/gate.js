@@ -15,6 +15,26 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
+import crypto from 'node:crypto';
+
+// ---- owner commands are SIGNED -------------------------------------------
+// An 'owner' label in the database is not proof by itself: any code that can
+// write to the log could write that label. So an owner command only counts if
+// it carries a signature made with the owner's private key. The app's owner
+// side (the UI the owner clicks) holds that key; Ithil's process only gets the
+// PUBLIC key, which can check signatures but cannot make them.
+// Every command has a one-time nonce; using it is recorded atomically with the
+// change, and the database refuses to record the same nonce twice.
+const canonical = c => JSON.stringify(Object.keys(c).sort().reduce((o, k) => (o[k] = c[k], o), {}));
+
+/** For the owner's side of the app only. Returns a base64 signature. */
+export function signOwnerCommand(privateKey, command) {
+  return crypto.sign(null, Buffer.from(canonical(command)), privateKey).toString('base64');
+}
+function verifyOwnerCommand(publicKey, command, sig) {
+  try { return crypto.verify(null, Buffer.from(canonical(command)), publicKey, Buffer.from(String(sig), 'base64')); }
+  catch { return false; }
+}
 
 export const LIMITS = Object.freeze({
   merge:              'Never merges branches or pull requests (only the owner merges)',
@@ -122,9 +142,10 @@ export class Gate {
    * @param {string}   [o.gitCwd]
    * @param {string}   [o.pushBranch]   the only branch pushes may go to
    * @param {(key:string, value:any)=>void} [o.applySetting]  how the app applies a setting
+   * @param {crypto.KeyLike} [o.ownerPublicKey]  ed25519 public key; without it no settings change is possible
    */
   constructor({ log, writableRoots = [], scratchRoots = [], bootPaths = [], gitCwd = process.cwd(),
-                pushBranch = null, applySetting = null, newId } = {}) {
+                pushBranch = null, applySetting = null, ownerPublicKey = null, newId } = {}) {
     if (!log) throw new Error('gate needs the event log');
     this.log = log;
     this.writable = writableRoots.map(realish);
@@ -133,6 +154,15 @@ export class Gate {
     this.gitCwd = gitCwd;
     this.pushBranch = pushBranch;
     this.applySetting = applySetting;
+    this.ownerPublicKey = !ownerPublicKey ? null
+      : ownerPublicKey instanceof crypto.KeyObject
+        ? (ownerPublicKey.type === 'public' ? ownerPublicKey : (() => { throw new Error('give the gate the PUBLIC key only'); })())
+        : crypto.createPublicKey(ownerPublicKey);
+    if (this.ownerPublicKey && this.ownerPublicKey.asymmetricKeyType !== 'ed25519')
+      throw new Error('owner key must be an ed25519 public key');
+    // the database itself refuses to consume the same owner command twice
+    log.db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS owner_command_used_once ON events (json_extract(body, '$.nonce'))
+                 WHERE kind = 'system.input' AND json_extract(body, '$.applied') = 'settings'`);
     let n = 0;
     this.newId = newId ?? (() => `r-${Date.now().toString(36)}-${(n++).toString(36)}`);
   }
@@ -189,19 +219,25 @@ export class Gate {
   }
 
   /**
-   * A settings change is allowed only with an explicit owner command:
-   * d.ownerEventId must point at an owner.message (only the owner can write
-   * those) whose command is exactly { type: 'settings', key, value } for this
-   * change, not erased, and not used before. Each command works once.
+   * A settings change is allowed only with an explicit, SIGNED owner command:
+   * d.ownerEventId points at an owner.message whose command is exactly
+   * { type: 'settings', key, value, nonce } for this change, signed with the
+   * owner's private key, not erased, and whose nonce was never used.
    */
   #ownerCommand(d) {
-    if (!this.applySetting || d.ownerEventId == null) return null;
+    if (!this.applySetting || !this.ownerPublicKey || d.ownerEventId == null) return null;
     const ev = this.log.get(d.ownerEventId);
     const c = ev?.body?.command;
     if (!ev || ev.actor !== 'owner' || ev.kind !== 'owner.message' || ev.purged || !c) return null;
     if (c.type !== 'settings' || c.key !== d.key || JSON.stringify(c.value) !== JSON.stringify(d.value)) return null;
-    const used = this.log.all().some(e => e.kind === 'system.input' && e.body?.applied === 'settings' && e.body.ownerEvent === ev.id);
-    return used ? null : ev;
+    if (typeof c.nonce !== 'string' || c.nonce.length < 16) return null;
+    if (!verifyOwnerCommand(this.ownerPublicKey, c, ev.body.sig)) return null;
+    if (this.#nonceUsed(c.nonce)) return null;
+    return ev;
+  }
+  #nonceUsed(nonce) {
+    return !!this.log.db.prepare(`SELECT 1 FROM events WHERE kind = 'system.input'
+      AND json_extract(body, '$.applied') = 'settings' AND json_extract(body, '$.nonce') = ?`).get(nonce);
   }
 
   #perform(effect, d) {
@@ -229,8 +265,20 @@ export class Gate {
         return p;
       }
       case 'settings.write': {
-        this.applySetting(d.key, d.value);
-        return this.log.input({ applied: 'settings', ownerEvent: d.ownerEventId, key: String(d.key) });
+        // consume the permission and apply the change as one step:
+        // record first (the unique index stops a second use), then apply;
+        // if applying fails, the record is rolled back and nothing changed.
+        const nonce = this.log.get(d.ownerEventId).body.command.nonce;
+        this.log.db.exec('BEGIN IMMEDIATE');
+        try {
+          const id = this.log.input({ applied: 'settings', ownerEvent: d.ownerEventId, nonce, key: String(d.key) });
+          this.applySetting(d.key, d.value);
+          this.log.db.exec('COMMIT');
+          return id;
+        } catch (e) {
+          this.log.db.exec('ROLLBACK');
+          throw e;
+        }
       }
       case 'git':
         return execFileSync('git', d.args, { cwd: d.cwd ?? this.gitCwd, encoding: 'utf8' });

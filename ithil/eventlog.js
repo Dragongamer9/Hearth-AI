@@ -124,8 +124,12 @@ export class EventLog {
 
   // ---- convenience writers -------------------------------------------------
   ownerSays(text)            { return this.append({ actor: 'owner', kind: 'owner.message', body: { text } }); }
-  /** An owner message carrying an exact command, e.g. { type: 'settings', key, value }. Only the app's owner side calls this. */
-  ownerCommand(text, command) { return this.append({ actor: 'owner', kind: 'owner.message', body: { text, command } }); }
+  /**
+   * An owner message carrying an exact command, e.g. { type: 'settings', key, value, nonce },
+   * plus the owner's signature (see signOwnerCommand in gate.js). Unsigned or
+   * badly signed commands are stored but never obeyed.
+   */
+  ownerCommand(text, command, sig) { return this.append({ actor: 'owner', kind: 'owner.message', body: { text, command, sig } }); }
   ithilSays(text)            { return this.append({ actor: 'ithil', kind: 'ithil.message', body: { text } }); }
   input(data)                { return this.append({ actor: 'system', kind: 'system.input', body: data }); }
   pin(actor, key, value)     { return this.append({ actor, kind: 'memory.pin', body: { key, value } }); }
