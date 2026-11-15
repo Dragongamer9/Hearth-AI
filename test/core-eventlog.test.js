@@ -57,7 +57,7 @@ test('owner-only, system-only and Ithil-only kinds are enforced in SQL', () => {
     { actor: 'owner',  kind: 'memory.forget', ref: pin },
     { actor: 'owner',  kind: 'made.up.kind' },
   ];
-  for (const b of bad) assert.throws(() => log.append(b), /CHECK|constraint/i, JSON.stringify(b));
+  for (const b of bad) assert.throws(() => log.append(b), /CHECK|constraint|never hidden/i, JSON.stringify(b));
   assert.equal(log.all().length, 1);
 });
 
@@ -73,7 +73,7 @@ test('Ithil cannot purge through the purge() helper either', () => {
 test('a correction is a new event; the old value stays in history', () => {
   const log = fresh();
   const pin = log.pin('owner', 'runtime', 'ollama');
-  log.correct('ithil', pin, 'llama.cpp', 'owner said he switched');
+  log.correct('owner', pin, 'llama.cpp', 'he switched');   // 0.5: a fact he pinned is corrected by him only
   const s = rebuild(log.all());
   assert.equal(s.facts.runtime.value, 'llama.cpp');
   assert.deepEqual(s.history[pin], ['ollama', 'llama.cpp']);
@@ -182,7 +182,7 @@ test('replaying a week of events rebuilds the expected facts and deletion states
   const gpu     = log.pin('ithil', 'gpu_temp_limit', '80C');
   const name    = log.pin('owner', 'preferred_name', 'Dragongamer9');
   log.ownerSays('I switched to llama.cpp');                          // day 2
-  log.correct('ithil', runtime, 'llama.cpp', 'owner said so');
+  log.correct('owner', runtime, 'llama.cpp', 'he said so');   // 0.5: his fact, his correction
   log.mood({ energy: 0.3, social: 0.7, curiosity: 0.5, stability: 0.8 });
   log.markDeleted(gpu);                                              // day 3
   const tmp = log.pin('owner', 'temp_password_hint', 'blue');        // day 4
