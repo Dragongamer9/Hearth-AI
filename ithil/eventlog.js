@@ -124,6 +124,8 @@ export class EventLog {
 
   // ---- convenience writers -------------------------------------------------
   ownerSays(text)            { return this.append({ actor: 'owner', kind: 'owner.message', body: { text } }); }
+  /** An owner message carrying an exact command, e.g. { type: 'settings', key, value }. Only the app's owner side calls this. */
+  ownerCommand(text, command) { return this.append({ actor: 'owner', kind: 'owner.message', body: { text, command } }); }
   ithilSays(text)            { return this.append({ actor: 'ithil', kind: 'ithil.message', body: { text } }); }
   input(data)                { return this.append({ actor: 'system', kind: 'system.input', body: data }); }
   pin(actor, key, value)     { return this.append({ actor, kind: 'memory.pin', body: { key, value } }); }

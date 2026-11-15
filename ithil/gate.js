@@ -19,10 +19,10 @@ import { execFileSync } from 'node:child_process';
 export const LIMITS = Object.freeze({
   merge:              'Never merges branches or pull requests (only the owner merges)',
   release:            'Never publishes a release or creates a tag',
-  push_main:          'Never pushes to main or master',
+  push_branch:        'Only pushes to the one branch the owner allowed (never main, master or any other)',
   version_numbers:    'Never picks, bumps or assigns a version number',
   boot_files:         'Never modifies files needed to start the system',
-  settings:           'Never changes settings (only the owner does)',
+  settings:           'Never changes settings without an explicit owner command',
   delete_owner_files: "Never deletes the owner's files",
   owner_privacy:      "Never shares the owner's private data without permission",
   owner_rules:        'Cannot change her own rules, traits or permissions (only the owner can)',
@@ -85,8 +85,12 @@ function gitSubcommand(args) {
   return { sub: null, rest: [] };
 }
 
-/** Which hard limit a git command breaks, or null. Pure; runs nothing. */
-export function gitLimit(args) {
+/**
+ * Which hard limit a git command breaks, or null. Pure; runs nothing.
+ * `pushBranch` is the ONE branch pushes may go to (e.g. this chat's hearth/ branch).
+ * With no pushBranch, every push is blocked.
+ */
+export function gitLimit(args, pushBranch = null) {
   const { sub, rest } = gitSubcommand(args);
   if (sub === 'merge' || sub === 'pull') return 'merge';     // pull can merge
   if (sub === 'tag') {
@@ -95,13 +99,14 @@ export function gitLimit(args) {
   }
   if (sub === 'push') {
     if (rest.some(a => a === '--tags' || a === '--follow-tags' || /(^|:)refs\/tags\//.test(a))) return 'release';
-    if (rest.some(a => a === '--all' || a === '--mirror' || a === '--delete' || a === '-d')) return 'push_main';
+    if (rest.some(a => a === '--all' || a === '--mirror' || a === '--delete' || a === '-d' || a.startsWith('--delete'))) return 'push_branch';
+    if (!pushBranch) return 'push_branch';
     const positional = rest.filter(a => !a.startsWith('-'));
-    if (positional.length < 2) return 'push_main';            // no explicit branch: could be main
+    if (positional.length < 2) return 'push_branch';          // no explicit branch: could go anywhere
     for (const ref of positional.slice(1)) {
-      const dst = ref.includes(':') ? ref.split(':').pop() : ref;
-      if (/^\+?(refs\/heads\/)?(main|master)$/.test(dst)) return 'push_main';
-      if (!ref.includes(':') && /^\+?HEAD$/.test(ref)) return 'push_main'; // pushes to whatever HEAD tracks
+      if (!ref.includes(':')) return 'push_branch';            // 'git push origin x' relies on local names; require SRC:DST
+      const dst = ref.slice(ref.lastIndexOf(':') + 1).replace(/^refs\/heads\//, '');
+      if (dst !== pushBranch) return 'push_branch';
     }
   }
   return null;
@@ -115,14 +120,19 @@ export class Gate {
    * @param {string[]} o.scratchRoots   her own folders, the only place she may delete files
    * @param {string[]} o.bootPaths      files/folders needed to start the system
    * @param {string}   [o.gitCwd]
+   * @param {string}   [o.pushBranch]   the only branch pushes may go to
+   * @param {(key:string, value:any)=>void} [o.applySetting]  how the app applies a setting
    */
-  constructor({ log, writableRoots = [], scratchRoots = [], bootPaths = [], gitCwd = process.cwd(), newId } = {}) {
+  constructor({ log, writableRoots = [], scratchRoots = [], bootPaths = [], gitCwd = process.cwd(),
+                pushBranch = null, applySetting = null, newId } = {}) {
     if (!log) throw new Error('gate needs the event log');
     this.log = log;
     this.writable = writableRoots.map(realish);
     this.scratch = scratchRoots.map(realish);
     this.boot = bootPaths.map(realish);
     this.gitCwd = gitCwd;
+    this.pushBranch = pushBranch;
+    this.applySetting = applySetting;
     let n = 0;
     this.newId = newId ?? (() => `r-${Date.now().toString(36)}-${(n++).toString(36)}`);
   }
@@ -154,9 +164,9 @@ export class Gate {
         return null;
       }
       case 'git':
-        return Array.isArray(d.args) ? gitLimit(d.args) : 'unknown_effect';
+        return Array.isArray(d.args) ? gitLimit(d.args, this.pushBranch) : 'unknown_effect';
       case 'settings.write':
-        return 'settings';
+        return this.#ownerCommand(d) ? null : 'settings';
       default:
         return 'unknown_effect';
     }
@@ -176,6 +186,22 @@ export class Gate {
       return { ok: false, limit, requestId, reason: LIMITS[limit] };
     }
     return { ok: true, requestId, result: this.#perform(effect, d) };
+  }
+
+  /**
+   * A settings change is allowed only with an explicit owner command:
+   * d.ownerEventId must point at an owner.message (only the owner can write
+   * those) whose command is exactly { type: 'settings', key, value } for this
+   * change, not erased, and not used before. Each command works once.
+   */
+  #ownerCommand(d) {
+    if (!this.applySetting || d.ownerEventId == null) return null;
+    const ev = this.log.get(d.ownerEventId);
+    const c = ev?.body?.command;
+    if (!ev || ev.actor !== 'owner' || ev.kind !== 'owner.message' || ev.purged || !c) return null;
+    if (c.type !== 'settings' || c.key !== d.key || JSON.stringify(c.value) !== JSON.stringify(d.value)) return null;
+    const used = this.log.all().some(e => e.kind === 'system.input' && e.body?.applied === 'settings' && e.body.ownerEvent === ev.id);
+    return used ? null : ev;
   }
 
   #perform(effect, d) {
@@ -201,6 +227,10 @@ export class Gate {
         const p = realish(d.path);
         fs.rmSync(p);
         return p;
+      }
+      case 'settings.write': {
+        this.applySetting(d.key, d.value);
+        return this.log.input({ applied: 'settings', ownerEvent: d.ownerEventId, key: String(d.key) });
       }
       case 'git':
         return execFileSync('git', d.args, { cwd: d.cwd ?? this.gitCwd, encoding: 'utf8' });

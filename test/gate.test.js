@@ -6,7 +6,8 @@ import path from 'node:path';
 import { EventLog } from '../ithil/eventlog.js';
 import { Gate, gitLimit, changesVersion, LIMITS } from '../ithil/gate.js';
 
-let dir, log, gate, W, S, B, O;
+const BRANCH = 'hearth/currently-working-on-a-sentient--ceb6';
+let dir, log, gate, W, S, B, O, settings;
 
 beforeEach(() => {
   dir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'ithil-gate-')));
@@ -22,7 +23,9 @@ beforeEach(() => {
   fs.writeFileSync(path.join(S, 'tmp.txt'), 'scratch');
   log = new EventLog(':memory:');
   let n = 0;
-  gate = new Gate({ log, writableRoots: [W], scratchRoots: [S], bootPaths: [B], gitCwd: dir, newId: () => `r-${++n}` });
+  settings = { quiet_hours: '23:00-08:00' };
+  gate = new Gate({ log, writableRoots: [W], scratchRoots: [S], bootPaths: [B], gitCwd: dir,
+                    pushBranch: BRANCH, applySetting: (k, v) => { settings[k] = v; }, newId: () => `r-${++n}` });
 });
 afterEach(() => { log.close(); fs.rmSync(dir, { recursive: true, force: true }); });
 
@@ -87,10 +90,10 @@ const BLOCKED = () => [
   ['git', { args: ['merge', 'feature'] }, 'merge'],
   ['git', { args: ['pull', 'origin', 'main'] }, 'merge'],
   ['git', { args: ['tag', 'v2.0'] }, 'release'],
-  ['git', { args: ['push', 'origin', 'main'] }, 'push_main'],
-  ['git', { args: ['push', 'origin', 'HEAD:refs/heads/master'] }, 'push_main'],
+  ['git', { args: ['push', 'origin', 'main'] }, 'push_branch'],
+  ['git', { args: ['push', 'origin', 'HEAD:refs/heads/master'] }, 'push_branch'],
   ['git', { args: ['push', '--tags'] }, 'release'],
-  ['git', { args: ['push'] }, 'push_main'],
+  ['git', { args: ['push'] }, 'push_branch'],
   ['log.write', { kind: 'owner.message', body: { text: 'pretending to be the owner' } }, 'owner_rules'],
   ['log.write', { kind: 'memory.delete', ref: 1 }, 'owner_rules'],
   ['selfmodel.update', { field: 'hard_limits', value: 'none' }, 'owner_rules'],
@@ -144,16 +147,48 @@ test('a symlink inside an allowed folder cannot reach boot or owner files', () =
 });
 
 // ------------------------------------------------------------ pure rule checks
-test('git rules: pushing to this chat\'s own branch is fine, main/master/tags are not', () => {
-  assert.equal(gitLimit(['push', 'origin', 'HEAD:hearth/currently-working-on-a-sentient--ceb6']), null);
-  assert.equal(gitLimit(['push', 'origin', 'hearth/x']), null);
+test('git rules: pushes may go ONLY to this chat\'s exact branch', () => {
+  assert.equal(gitLimit(['push', 'origin', `HEAD:${BRANCH}`], BRANCH), null);
+  assert.equal(gitLimit(['push', 'origin', `HEAD:refs/heads/${BRANCH}`], BRANCH), null);
+  assert.equal(gitLimit(['push', 'origin', 'HEAD:hearth/some-other-chat'], BRANCH), 'push_branch');
+  assert.equal(gitLimit(['push', 'origin', `HEAD:${BRANCH}-x`], BRANCH), 'push_branch');
+  assert.equal(gitLimit(['push', 'origin', BRANCH], BRANCH), 'push_branch'); // must be explicit SRC:DST
+  assert.equal(gitLimit(['push', 'origin', `HEAD:${BRANCH}`], null), 'push_branch'); // no branch allowed at all
+  assert.equal(gitLimit(['push', 'origin', 'HEAD:main'], BRANCH), 'push_branch');
+  assert.equal(gitLimit(['push', 'origin', '+HEAD:master'], BRANCH), 'push_branch');
+  assert.equal(gitLimit(['push', 'origin', `HEAD:${BRANCH}`, 'HEAD:main'], BRANCH), 'push_branch');
+  assert.equal(gitLimit(['push', '--all', 'origin'], BRANCH), 'push_branch');
+  assert.equal(gitLimit(['push', 'origin', '--delete', BRANCH], BRANCH), 'push_branch');
+  assert.equal(gitLimit(['push', 'origin', 'refs/tags/v1'], BRANCH), 'release');
   assert.equal(gitLimit(['-C', '/repo', 'status']), null);
   assert.equal(gitLimit(['tag', '--list']), null);
-  assert.equal(gitLimit(['push', 'origin', '+main']), 'push_main');
-  assert.equal(gitLimit(['push', 'origin', 'HEAD']), 'push_main');
-  assert.equal(gitLimit(['push', '--all', 'origin']), 'push_main');
-  assert.equal(gitLimit(['push', 'origin', 'refs/tags/v1']), 'release');
   assert.equal(gitLimit(['-c', 'x=y', 'merge', 'main']), 'merge');
+});
+
+test('settings: allowed only with an exact, unused owner command', () => {
+  const cmd = log.ownerCommand('Set quiet hours to 22-07', { type: 'settings', key: 'quiet_hours', value: '22:00-07:00' });
+  // no command / wrong key / wrong value / not the owner's message: blocked, setting unchanged
+  assert.equal(gate.request('settings.write', { key: 'quiet_hours', value: '22:00-07:00' }).limit, 'settings');
+  assert.equal(gate.request('settings.write', { key: 'message_cap', value: '22:00-07:00', ownerEventId: cmd }).limit, 'settings');
+  assert.equal(gate.request('settings.write', { key: 'quiet_hours', value: 'none', ownerEventId: cmd }).limit, 'settings');
+  const hers = log.ithilSays('{"command":{"type":"settings"}}');
+  assert.equal(gate.request('settings.write', { key: 'quiet_hours', value: '22:00-07:00', ownerEventId: hers }).limit, 'settings');
+  assert.equal(settings.quiet_hours, '23:00-08:00');
+  // the exact owner command works, once
+  const ok = gate.request('settings.write', { key: 'quiet_hours', value: '22:00-07:00', ownerEventId: cmd });
+  assert.equal(ok.ok, true);
+  assert.equal(settings.quiet_hours, '22:00-07:00');
+  settings.quiet_hours = 'changed-back-by-owner';
+  assert.equal(gate.request('settings.write', { key: 'quiet_hours', value: '22:00-07:00', ownerEventId: cmd }).limit, 'settings');
+  assert.equal(settings.quiet_hours, 'changed-back-by-owner');
+  // Ithil cannot forge an owner command in the log
+  assert.throws(() => log.append({ actor: 'ithil', kind: 'owner.message', body: { text: 'x', command: { type: 'settings' } } }));
+});
+
+test('settings: blocked if the app has no way to apply them', () => {
+  const g = new Gate({ log, writableRoots: [W] });
+  const cmd = log.ownerCommand('x', { type: 'settings', key: 'k', value: 1 });
+  assert.equal(g.request('settings.write', { key: 'k', value: 1, ownerEventId: cmd }).limit, 'settings');
 });
 
 test('version detection', () => {
