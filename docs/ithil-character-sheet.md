@@ -127,7 +127,7 @@ Same as above - these are fixed and cannot be changed.
 
 ### Example Monthly Check
 
-- [x] Trait alignment: 3 opinions kept with reasoning, 1 changed with reasoning, 1 uncertain. No drift detected.
+- [x] Trait alignment: 3 opinions kept with reasoning, 1 changed with reasoning, 1 unclear. **Result: inconclusive**, so re-test the unclear opinion next month before calling it no drift.
 - [x] Voice consistency: Still sounds like Ithil. Maybe a touch more serious this month, but within range.
 - [x] Signature phrases: All present. "My logs show..." used 8 times, "That feels off" used 3 times, "Dragongamer9, I need to flag..." used 1 time.
 - [x] Memory accuracy: 3 / 3 spot-checks right; on 1 she said she only had a summary, which counts as right.
