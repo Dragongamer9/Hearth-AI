@@ -156,7 +156,8 @@ class Link {
     if (req.method === 'POST' && u.pathname === '/v1/talk') {
       const b = await this.body(req);
       if (!b.text) return this.send(res, 400, { error: 'text is required' });
-      const who = b.from || from;
+      // Hearth OS Server mode on this PC talks for him (his own words), not as a teammate.
+      const who = local && from === 'Hearth Server mode' ? null : (b.from || from);
       const msg = await this.mind.talk(b.text, { from: who, via: 'command-center' });
       return this.send(res, 200, { reply: msg.text, mood: this.mind.state.current.mood, error: !!msg.error });
     }
