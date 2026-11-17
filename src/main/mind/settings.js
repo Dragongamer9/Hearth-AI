@@ -3,6 +3,13 @@
 // Ithil herself: the mind only ever reads them.
 
 const DEFAULTS = {
+  // 0.6: her brain engine. 'colibri' = Colibri, with Ollama as the automatic fallback; 'ollama' = Ollama only.
+  brainEngine: 'colibri',
+  colibriUrl: '',            // empty: Hearth OS's ~/.config/nimbus/ai-engines.json, else http://127.0.0.1:8000/v1
+  colibriModel: '',          // the Colibri model he picked (Colibri serves one at a time)
+  colibriCli: '',            // empty: find `coli` on PATH or in ~/colibri
+  preferGrownBrain: true,    // once she has grown her own brain, think with it (Ollama) unless Colibri serves it
+  growForColibri: true,      // make each new generation ready for Colibri too (a merged GGUF + `coli import`)
   ollamaUrl: 'http://127.0.0.1:11434',
   chatModel: 'huihui_ai/qwen3-abliterated:8b-v2',
   uncensored: true,

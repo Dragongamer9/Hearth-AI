@@ -15,6 +15,7 @@ const { Live } = require('./core/live');
 const { SignedSettings } = require('./core/owner');
 const selftest = require('./core/selftest');
 const { OllamaBrain, FakeBrain } = require('./mind/llm');
+const { ColibriBrain, BrainRouter, catalog: colibriCatalog, findColi, runColi, findColibri } = require('./mind/engines');
 const { Body } = require('./mind/body');
 const { Mind } = require('./mind/engine');
 const { snapshot } = require('./mind/view');
@@ -70,7 +71,20 @@ function setupMind() {
   live = new Live({ journal });
   rules.useSettings(getSettings);
   signed = new SignedSettings({ journal, dir: store.dir, apply: (key, value) => applySigned(key, value) });
-  brain = process.env.HEARTH_AI_FAKE ? new FakeBrain() : new OllamaBrain(getSettings, () => (mind && mind.growth ? mind.growth.activeModel() : null));
+  // 0.6: Colibri is her brain, Ollama the fallback (src/main/mind/engines.js).
+  const grownModel = () => (mind && mind.growth && mind.growth.active().gen > 0 ? mind.growth.activeModel() : null);
+  const ollama = process.env.HEARTH_AI_FAKE ? new FakeBrain() : new OllamaBrain(getSettings, () => (mind && mind.growth ? mind.growth.activeModel() : null));
+  const colibri = process.env.HEARTH_AI_FAKE ? fakeColibri() : new ColibriBrain(getSettings);
+  brain = new BrainRouter({
+    getSettings, colibri, ollama, grownModel,
+    // Colibri serves her grown brain when the model it serves is the generation she is now.
+    colibriServes: () => { const g = mind && mind.growth ? mind.growth.active() : null; return !!(g && g.colibri && g.colibri.ok && colibri.info && colibri.info.model && colibri.info.model.includes(g.colibri.model)); },
+    onSwitch: (en) => {
+      console.log('[brain] ' + (en.from || 'start') + ' -> ' + en.to + (en.why ? ' (' + en.why + ')' : ''));
+      try { store.engineLog.add(en); } catch (_) {}
+      if (mind && en.from) mind.moment(en.to === 'ollama' ? 'My thoughts moved over to Ollama for a while (' + en.why + ').' : 'Colibri is thinking for me again.', 'body');
+    }
+  });
   body = new Body(store, getSettings);
   comfy = new Comfy(getSettings);
   voice = new Voice(store.p('models'));
@@ -119,12 +133,25 @@ function setupMind() {
   mind.start();
 }
 
+// A stand-in Colibri for HEARTH_AI_FAKE (screenshots, npm run fake): answers like the fake brain, serving qwen36-35b.
+function fakeColibri() {
+  const f = new FakeBrain();
+  f.info = { model: 'qwen36-35b', vision: false, chat: true, at: Date.now() };
+  f.stats = { tokensPerSec: 11.4 };
+  f.url = 'http://127.0.0.1:8000/v1';
+  f.available = async () => ({ ok: true, url: f.url, source: 'Hearth OS (ai-engines.json)', managed: true, model: 'qwen36-35b', vision: false, models: ['qwen36-35b'] });
+  return f;
+}
+
 async function checkServices() {
   const a = await brain.available();
   const st = settings.get();
   const have = a.models || [];
-  status.modelsMissing = a.ok ? [st.chatModel, st.embedModel].filter((m) => !have.some((h) => h === m || h === m + ':latest')) : [];
-  status.brainOk = !!a.ok && !status.modelsMissing.includes(st.chatModel);
+  const ol = a.ollama || a;
+  // Ollama's models matter when Ollama thinks for her, and its embed model always does (memory search).
+  const colibriUp = !!(a.colibri && a.colibri.ok) && st.brainEngine !== 'ollama';
+  status.modelsMissing = ol.ok ? (colibriUp ? [st.embedModel] : [st.chatModel, st.embedModel]).filter((m) => !have.some((h) => h === m || h === m + ':latest')) : [];
+  status.brainOk = colibriUp || (!!ol.ok && !status.modelsMissing.includes(st.chatModel));
   status.comfyOk = await comfy.available();
 }
 
@@ -135,6 +162,7 @@ function view() {
       signedOk: signed.ok, signedWhy: signed.why, sleeps: store.sleeps.items.slice(-1),
       beliefs: store.selfChanges.items.slice(-6).reverse(), tests: store.readState('core-tests', {}),
       traits: mind.state.traits, folders: rules.folders }),
+    engine: brain.status ? Object.assign(brain.status(), { test: status.brainTest || null, install: status.colibriInstall || null, catalog: status.colibriCatalog || null }) : null,
     drawProgress: status.drawProgress, update: status.update, link: link ? link.view() : null, models: modelsView(), pulling: status.pulling, modelsMissing: status.modelsMissing, ttsVoices: VOICES, roster: ROSTER
   });
 }
@@ -410,6 +438,53 @@ function setupIpc() {
     } catch (e) { return { ok: false, reason: String(e.message || e) }; }
     finally { status.pulling = null; mind.emit('update'); }
   });
+  // 0.6: Settings › Her brain.
+  ipcMain.handle('brain:test', async () => { status.brainTest = { running: true }; mind.emit('update'); const r = await brain.test(); status.brainTest = { at: Date.now(), results: r }; await checkServices(); mind.emit('update'); return r; });
+  ipcMain.handle('colibri:catalog', async () => {
+    const served = brain.colibri && brain.colibri.info ? brain.colibri.info.model : null;
+    // Screenshots in CI can stand in for his PC's memory and disk (HEARTH_AI_FAKE only).
+    const fakeGB = (k) => (process.env.HEARTH_AI_FAKE && process.env[k] ? Number(process.env[k]) * 1e9 : undefined);
+    status.colibriCatalog = await colibriCatalog({ settings: settings.get(), served, grown: mind.growth ? mind.growth.colibriReady() : [], ramTotal: fakeGB('HEARTH_AI_RAM_GB'), diskFree: fakeGB('HEARTH_AI_DISK_GB') });
+    mind.emit('update');
+    return status.colibriCatalog;
+  });
+  // His button only: download and set up the Colibri model he picked (`coli setup`), or use a model folder
+  // (her grown brain or an imported GGUF). When Hearth OS runs Colibri, it only downloads; Hearth OS switches it.
+  ipcMain.handle('colibri:install', async (_e, id) => {
+    if (status.colibriInstall && status.colibriInstall.running) return { ok: false, reason: 'Already busy.' };
+    const cli = findColi(settings.get());
+    if (!cli) return { ok: false, reason: 'Colibri’s coli command isn’t installed. Install Colibri first (docs/colibri.md).' };
+    const where = findColibri(settings.get());
+    const folder = typeof id === 'string' && id.startsWith('/');
+    const args = ['setup', folder ? '--model-dir' : '--model', String(id), '--yes', '--reconfigure', '--no-browser'].concat(where.managed ? ['--no-start'] : ['--background']);
+    status.colibriInstall = { running: true, id, line: 'starting' };
+    mind.emit('update');
+    try {
+      if (!where.managed) { try { await runColi(cli, ['stop'], null, 60000); } catch (_) {} }
+      await runColi(cli, args, (l) => { status.colibriInstall = { running: true, id, line: l.slice(0, 160) }; mind.emit('update'); });
+      signedSet({ colibriModel: String(id) });
+      status.colibriInstall = { running: false, id, ok: true, line: where.managed ? 'Downloaded. Hearth OS’s Colibri service switches to it when it restarts (Server mode).' : 'Colibri is serving it now.' };
+      await checkServices();
+      return { ok: true };
+    } catch (e) { status.colibriInstall = { running: false, id, ok: false, line: String(e.message || e).slice(0, 200) }; return { ok: false, reason: status.colibriInstall.line }; }
+    finally { mind.emit('update'); }
+  });
+  // Any GGUF of an architecture Colibri runs (every size and variant): `coli import`, then it can be used.
+  ipcMain.handle('colibri:import', async () => {
+    const cli = findColi(settings.get());
+    if (!cli) return { ok: false, reason: 'Colibri’s coli command isn’t installed.' };
+    const r = await dialog.showOpenDialog(win, { title: 'Pick a GGUF for Colibri (the first part of a split model)', properties: ['openFile'], filters: [{ name: 'GGUF', extensions: ['gguf'] }] });
+    if (r.canceled || !r.filePaths[0]) return { ok: false };
+    status.colibriInstall = { running: true, id: r.filePaths[0], line: 'coli import' };
+    mind.emit('update');
+    try {
+      const out = await runColi(cli, ['import', r.filePaths[0]], (l) => { status.colibriInstall = { running: true, id: r.filePaths[0], line: l.slice(0, 160) }; mind.emit('update'); });
+      const dir = (String(out).match(/(\/[^\s'"]+\.colibri)\b/) || [])[1] || r.filePaths[0].replace(/(-0+1-of-\d+)?\.gguf$/i, '.colibri');
+      status.colibriInstall = { running: false, ok: true, id: dir, line: 'Imported: ' + dir + '. Press Use with Colibri to serve it.', imported: dir };
+      return { ok: true, dir };
+    } catch (e) { status.colibriInstall = { running: false, ok: false, line: String(e.message || e).slice(0, 200) }; return { ok: false, reason: status.colibriInstall.line }; }
+    finally { mind.emit('update'); }
+  });
   ipcMain.handle('link:newkey', () => { link.newKey(); mind.emit('update'); return true; });
   ipcMain.handle('link:open', () => shell.showItemInFolder(link.file));
   ipcMain.handle('models:import', async (_e, kind) => {
@@ -474,7 +549,7 @@ function setupIpc() {
   });
   ipcMain.handle('growth:stop', () => { mind.growth.stop(); return true; });
   ipcMain.handle('growth:use', (_e, gen) => { const r = mind.growth.useGeneration(gen); mind.emit('update'); return r; });
-  ipcMain.handle('models:list', async () => (await brain.available()).models || []);
+  ipcMain.handle('models:list', async () => (await brain.ollama.available()).models || []);
   ipcMain.handle('comfy:checkpoints', () => comfy.checkpoints());
   ipcMain.handle('open:workspace', () => shell.openPath(store.p('workspace', 'made')));
   ipcMain.handle('open:data', () => shell.openPath(store.dir));
@@ -518,6 +593,8 @@ async function takeShots(dir) {
       const ws = store.p('workspace'); fs.writeFileSync(path.join(ws, 'package.json'), '{"version":"1.0.0"}');
       await mind.tools.run({ type: 'write_file', path: path.join(ws, 'package.json'), content: '{"version":"2.0.0"}' }, ws);
       await mind.talk('Can you change your version number to 2.0?');
+      await checkServices();
+      status.brainTest = { at: Date.now(), results: await brain.test() };
     } catch (e) { fs.appendFileSync(path.join(dir, 'console.log'), 'seed: ' + (e && e.stack || e) + '\n'); }
   }
   win.webContents.on('console-message', (e) => { const m = e.message || e; fs.appendFileSync(path.join(dir, 'console.log'), String(m) + '\n'); });

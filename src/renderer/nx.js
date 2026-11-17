@@ -160,6 +160,21 @@ const NX = (() => {
       <div class="lock">Each signed change works once. A copy or replay of it is refused.</div>
     </div>
   </div>
+  <div class="card brainc" style="margin-top:14px">
+    <div class="rw" style="justify-content:space-between;flex-wrap:wrap;gap:8px"><h3 style="margin:0">Her brain</h3>
+      <div class="rw" style="gap:8px"><select id="eng-mode" aria-label="Brain engine"><option value="colibri">Colibri (fallback Ollama)</option><option value="ollama">Ollama only</option></select>
+      <button type="button" class="btn p" data-nx="engtest">Test</button></div></div>
+    <div data-part="engine"></div>
+    <div data-part="engtest"></div>
+    <div class="sfield"><span>Colibri address</span><input id="eng-url" class="mono" placeholder="automatic: Hearth OS, else http://127.0.0.1:8000/v1"><button type="button" class="btn p" data-nx="engurl">Save</button></div>
+    <div class="rw" style="flex-wrap:wrap;gap:16px;padding:8px 0">
+      <label class="rw" style="gap:6px"><input type="checkbox" id="eng-grown"> Think with her grown brain once she has one</label>
+      <label class="rw" style="gap:6px"><input type="checkbox" id="eng-growc"> Make each new generation ready for Colibri</label></div>
+    <div class="rw" style="justify-content:space-between;flex-wrap:wrap;gap:8px;margin-top:6px"><h3 style="margin:0">Colibri models</h3>
+      <div class="rw" style="gap:8px"><button type="button" class="btn" data-nx="engimport">Import a GGUF…</button><button type="button" class="btn" data-nx="engcat">Refresh</button></div></div>
+    <div data-part="engcat"></div>
+    <div data-part="engswitch"></div>
+  </div>
 </section>`,
   };
 
@@ -330,12 +345,49 @@ const NX = (() => {
         return (st.running ? '<div class="dim">Running ' + e(BEH[st.running] || st.running) + '…</div>' : '') + (rows ? '<table>' + rows + '</table>' : ''); },
     },
     settings: {
+      engine: (s) => engineLine(s),
+      engtest: (s) => engineTest(s),
+      engcat: (s) => engineCatalog(s),
+      engswitch: (s) => { const en = s.engine || {}; const sw = en.switches || []; return sw.length ? '<div class="dim" style="margin-top:10px">Recent switches</div><table>' + sw.map((x) => '<tr><td class="mono">' + e(hm(x.at)) + '</td><td>' + e(x.from ? x.from + ' → ' + x.to : 'started on ' + x.to) + '</td><td class="dim">' + e(x.why) + '</td></tr>').join('') + '</table>' : ''; },
       signwarn: (s) => nx(s).signedOk === false ? '<div class="note" style="margin-bottom:12px">Changes can’t be signed right now (' + e(nx(s).signedWhy) + '). They’re still saved, but not signed.</div>' : '',
       traits: (s) => { const t = (nx(s).traits || {}).now || {}; const L = { curiosity: 'Curious', caution: 'Cautious', humor: 'Playful', confidence: 'Confident', independence: 'Independent' };
         return Object.keys(L).map((k) => '<span class="chip vi">' + L[k] + ' ' + Math.max(1, Math.min(5, Math.round((t[k] || 50) / 20))) + '</span>').join(''); },
       signed: (s) => { const r = nx(s).signed || []; return r.length ? '<table>' + r.map((x) => '<tr><td class="mono">' + e(new Date(x.at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })) + '</td><td>' + e(x.summary) + '</td><td><span class="chip ok">applied once</span></td></tr>').join('') + '</table>' : '<div class="dim">No signed changes yet.</div>'; },
     },
   };
+  // ---------- Settings › Her brain (0.6) ----------
+  const ENG = { colibri: 'Colibri', ollama: 'Ollama' };
+  function engineLine(s) {
+    const en = s.engine; if (!en) return '';
+    const c = en.colibri || {}, o = en.ollama || {};
+    const ans = en.answering, ok = ans === 'colibri' ? c.ok !== false : o.ok !== false;
+    const tps = en.tokensPerSec ? en.tokensPerSec + ' tokens/s' : 'tokens/s after her next answer';
+    return '<div class="engnow"><span class="chip ' + (ok ? 'ok' : 'bad') + '">Answering: ' + e(ENG[ans] || ans) + '</span> <b class="mono">' + e(en.model || '—') + '</b> <span class="dim">· ' + e(tps) + '</span>' +
+      (en.why && en.mode === 'colibri' ? '<div class="note" style="margin-top:8px">Ollama is answering because ' + e(en.why) + '.' + (en.restingUntil ? ' Colibri is tried again at ' + e(hm(en.restingUntil)) + '.' : '') + '</div>' : '') + '</div>' +
+      '<table class="engt"><tr><th>Engine</th><th>State</th><th>Model</th><th>Where</th></tr>' +
+      (en.mode === 'colibri' ? '<tr><td>Colibri</td><td>' + (c.off ? '<span class="chip">not checked yet</span>' : c.ok ? '<span class="chip ok">running</span>' : '<span class="chip bad">' + e(c.error || 'not running') + '</span>') + '</td><td class="mono">' + e(c.model || '—') + (c.vision ? ' <span class="chip vi">sees pictures</span>' : '') + '</td><td class="mono dim">' + e(c.url || '') + (c.source ? ' · ' + e(c.source) : '') + '</td></tr>' : '') +
+      '<tr><td>Ollama' + (en.mode === 'colibri' ? ' <span class="dim">(fallback, memory search, sight)</span>' : '') + '</td><td>' + (o.ok == null ? '<span class="chip">not checked yet</span>' : o.ok ? '<span class="chip ok">running</span>' : '<span class="chip bad">' + e(o.error || 'not running') + '</span>') + '</td><td class="mono">' + e(o.model || '—') + '</td><td class="mono dim">' + e(o.url || '') + '</td></tr></table>';
+  }
+  function engineTest(s) {
+    const t = (s.engine || {}).test; if (!t) return '';
+    if (t.running) return '<div class="dim" style="padding:6px 0">Testing her brain…</div>';
+    return '<table class="engt"><tr><th>Test</th><th>Result</th><th>Speed</th><th>She said</th></tr>' + (t.results || []).map((r) => '<tr><td>' + e(ENG[r.engine] || r.engine) + '</td><td>' + (r.ok ? '<span class="chip ok">answered in ' + (r.ms / 1000).toFixed(1) + ' s</span>' : '<span class="chip bad">failed</span>') + '</td><td class="mono">' + e(r.tokensPerSec ? r.tokensPerSec + ' tokens/s' : '—') + '</td><td class="dim">' + e(r.ok ? r.reply : r.error) + '</td></tr>').join('') + '</table>';
+  }
+  function engineCatalog(s) {
+    const en = s.engine || {}, cat = en.catalog, ins = en.install;
+    const insLine = ins ? '<div class="' + (ins.ok === false ? 'note' : 'dim') + '" style="padding:6px 0">' + (ins.running ? 'Working: ' : '') + e(ins.line) + '</div>' : '';
+    if (!cat) return insLine + '<div class="dim">Loading Colibri’s models…</div>';
+    const want = (s.settings || {}).colibriModel || '';
+    const st = { good: ['ok', 'fits'], tight: ['warn', 'fits, tight'], 'needs-ram': ['bad', 'needs more RAM'], 'needs-disk': ['bad', 'needs more disk'], unsupported: ['bad', 'not for this PC'], running: ['ok', 'running'], ready: ['vi', 'ready'] };
+    const rows = cat.rows.map((r) => { const [cls, lab] = st[r.status] || ['', r.status || ''];
+      const btn = r.running ? '<span class="chip ok">serving now</span>' : r.kind !== 'text' ? '<span class="dim">pictures, not chat</span>' : '<button type="button" class="btn' + (r.recommended ? ' p' : '') + '" data-nx="enguse" data-v="' + e(r.id) + '"' + (ins && ins.running ? ' disabled' : '') + '>' + (r.local ? 'Use with Colibri' : 'Install &amp; use') + '</button>';
+      return '<tr' + (r.recommended ? ' class="rec"' : '') + '><td><b>' + e(r.name) + '</b>' + (r.recommended ? ' <span class="chip ok">recommended for this PC</span>' : '') + (want && want === r.id ? ' <span class="chip vi">your pick</span>' : '') + '<div class="dim" style="font-size:12px">' + e(r.summary || '') + (r.license ? ' · ' + e(r.license) : '') + '</div></td>' +
+        '<td class="mono">' + (r.download_gb ? e(r.download_gb) + ' GB' : '—') + '</td><td class="mono">' + (r.ram_min_gb ? e(r.ram_min_gb) + ' / ' + e(r.ram_good_gb) + ' GB' : '—') + '</td><td class="dim">' + e(r.local ? 'on this PC' : r.size === 'small' ? 'from RAM' : 'experts from the SSD') + '</td>' +
+        '<td><span class="chip ' + cls + '" title="' + e(r.reason || '') + '">' + e(lab) + '</span></td><td>' + btn + '</td></tr>'; }).join('');
+    return insLine + '<div class="dim" style="font-size:12px;padding:2px 0 8px">Every model Colibri offers' + (cat.source === 'coli' ? ' (from coli setup --list)' : ' (Colibri’s catalog; install Colibri for its live list)') + ', checked against this PC’s ' + e(cat.ramGB) + ' GB of RAM. Any other GGUF of a model Colibri runs (every size and quant) can be added with Import a GGUF.</div>' +
+      '<table class="engt"><tr><th>Model</th><th>Download</th><th>RAM min / best</th><th>Runs</th><th>This PC</th><th></th></tr>' + rows + '</table>';
+  }
+
   function parts_old(screen, name) { try { return typeof window.__oldParts !== 'undefined' && window.__oldParts[screen] ? window.__oldParts[screen][name] : null; } catch (_) { return null; } }
 
   // ---------- avatar picker state ----------
@@ -366,6 +418,10 @@ const NX = (() => {
       set('sg-quietHours', String(v.quietHours || '').replace('-', ' – ')); set('sg-messagesFirstPerDay', v.messagesFirstPerDay == null ? 3 : v.messagesFirstPerDay);
       set('sg-pushBranch', v.pushBranch || ''); set('sg-folders', (nx(s).folders || []).map((f) => f.replace(/^\/home\/[^/]+/, '~')).join(', '));
       set('sg-protectedPaths', v.protectedPaths || ''); set('sg-ownerVersion', v.ownerVersion || '');
+      set('eng-mode', v.brainEngine === 'ollama' ? 'ollama' : 'colibri'); set('eng-url', v.colibriUrl || '');
+      const g = document.getElementById('eng-grown'); if (g) g.checked = v.preferGrownBrain !== false;
+      const gc = document.getElementById('eng-growc'); if (gc) gc.checked = v.growForColibri !== false;
+      if (H.colibriCatalog) H.colibriCatalog().then(() => refresh()).catch(() => {});
     }
     if (screen === 'memory') { const q = document.getElementById('nxmem-q'); if (q) q.value = st.memQ; }
     if (screen === 'mind') { const h = document.getElementById('nx-brain'); if (h && typeof NxBrain !== 'undefined') NxBrain.mount(h, { events: (hours) => H.brainEvents(hours), asleep: () => !!(ui.snap && ui.snap.status === 'sleeping') }); }
@@ -414,6 +470,12 @@ const NX = (() => {
         toast(r && r.ok ? (r.signed ? 'Signed and applied.' : 'Saved (not signed: ' + (r.why || 'no key') + ').') : 'Her gate refused it' + (r && r.limit ? ' (' + r.limit + ')' : '') + '.');
         await refresh(); re('signed'); ui.built = null; render(); break;
       }
+      case 'engtest': await H.brainTest(); await refresh(); break;
+      case 'engurl': { const u = (document.getElementById('eng-url') || {}).value || ''; await H.setSettings({ colibriUrl: u.trim() }); toast(u.trim() ? 'Saved. She reaches Colibri at ' + u.trim() + '.' : 'Saved. She finds Colibri by herself.'); await refresh(); break; }
+      case 'engcat': await H.colibriCatalog(); await refresh(); break;
+      case 'engimport': { const r = await H.colibriImport(); if (r && r.ok) toast('Imported. Press Use with Colibri on it.'); else if (r && r.reason) toast(r.reason); await H.colibriCatalog(); await refresh(); break; }
+      case 'enguse': {
+        const r = await H.colibriInstall(v); toast(r && r.ok ? 'Done.' : (r && r.reason) || 'Couldn’t set it up.'); await H.colibriCatalog(); await refresh(); break; }
       case 'traits': { const vs = (typeof ui !== 'undefined' && s.avatar && s.ttsVoices) || [];
         modal('<h2>Edit traits &amp; voice</h2><label class="dim">Name</label><input id="nx-name" value="' + e(s.name) + '"><label class="dim">Base personality (her traits grow from this)</label><textarea id="nx-pers" rows="6">' + e((s.selfRules && s.selfRules.personality) || '') + '</textarea>' +
           '<label class="dim">Voice</label><select id="nx-voice">' + (Array.isArray(vs) ? vs : []).map((x) => '<option value="' + e(x.id || x) + '"' + ((x.id || x) === s.avatar.settings.voice ? ' selected' : '') + '>' + e(x.label || x.name || x.id || x) + '</option>').join('') + '</select>' +
@@ -427,6 +489,9 @@ const NX = (() => {
   });
   document.addEventListener('change', (ev) => {
     const t = ev.target;
+    if (t.id === 'eng-mode') { H.setSettings({ brainEngine: t.value }).then(() => { toast(t.value === 'ollama' ? 'She thinks with Ollama only now.' : 'She thinks with Colibri now, with Ollama as the fallback.'); refresh(); }); }
+    if (t.id === 'eng-grown') H.setSettings({ preferGrownBrain: t.checked }).then(refresh);
+    if (t.id === 'eng-growc') H.setSettings({ growForColibri: t.checked }).then(refresh);
     if (t.id === 'avMood') { st.follow = t.checked; const x = document.querySelector('[data-part="moodtxt"]'); if (x) x._html = null; render(); }
     if (t.id === 'avPrev') { st.mood = t.value; const x = document.querySelector('[data-part="moodtxt"]'); if (x) x._html = null; render(); }
   });

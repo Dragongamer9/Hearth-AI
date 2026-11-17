@@ -194,6 +194,8 @@ class Growth {
         entry.note = 'Better or as good as gen ' + prev.gen;
         this.lineage.generations.push(entry);
         this.save();
+        // 0.6: make her new brain ready for Colibri too. Never stops her growing if it fails.
+        await this.forColibri(entry, dir, baseDir);
         this.mind.state.brain = { generation: gen, base: st.chatModel, model, history: (this.mind.state.brain.history || []).concat([{ generation: gen, model, at: entry.at }]) };
         await this.mind.memory.remember({ kind: 'event', weight: 'core', text: 'I grew a new brain from my own life. I’m generation ' + gen + ' now.' });
         this.mind.moment('Woke up as generation ' + gen + '.', 'self');
@@ -218,6 +220,35 @@ class Growth {
       this.running = false;
     }
   }
+
+  // 0.6: her grown brain in Colibri. Colibri can't load an Ollama LoRA adapter, so the adapter is merged into her
+  // base weights, written as one GGUF (q8_0, about 9 GB) and imported with `coli import` (it reads the GGUF in place).
+  // Colibri serves one model at a time and belongs to him (or to Hearth OS): she only gets it ready, the owner points
+  // Colibri at it (Settings › Her brain › Use with Colibri). Docs: docs/colibri.md.
+  async forColibri(entry, dir, baseDir) {
+    const st = this.settings.get();
+    if (st.growForColibri === false || st.brainEngine === 'ollama') return null;
+    const { findColi } = require('./engines');
+    const coli = this.o.coli !== undefined ? this.o.coli : findColi(st);
+    if (!coli) { entry.colibri = { ok: false, why: 'Colibri’s coli command isn’t installed' }; this.save(); return null; }
+    const name = 'ithil-gen-' + entry.gen;
+    const gguf = path.join(dir, name + '-q8_0.gguf');
+    const out = path.join(dir, name);
+    try {
+      this.setStatus('colibri', 0, 'Making generation ' + entry.gen + ' ready for Colibri');
+      await this.run(this.py(), [this.trainScript(), 'merged', '--base-dir', baseDir, '--out-dir', dir, '--llama-cpp', this.p('llama.cpp'), '--gguf-name', path.basename(gguf)], { cwd: this.root }, (l) => { let j; try { j = JSON.parse(l); } catch (_) { return; } if (j.stage !== 'error') this.setStatus('colibri', j.pct, j.msg); else this._err = j.msg; });
+      await this.run(coli, ['import', gguf, '--out', out], { cwd: dir });
+      entry.colibri = { ok: true, dir: out, gguf, model: name, at: this.mind.now() };
+      this.mind.moment('Generation ' + entry.gen + ' of my brain is ready for Colibri too.', 'self');
+    } catch (e) {
+      entry.colibri = { ok: false, why: String(this._err || e.message || e).slice(0, 300) };
+    }
+    this.save();
+    return entry.colibri;
+  }
+
+  // Her grown generations that are ready for Colibri (for Settings › Her brain).
+  colibriReady() { return this.lineage.generations.filter((g) => g.colibri && g.colibri.ok && g.status !== 'rejected').map((g) => ({ gen: g.gen, dir: g.colibri.dir, model: g.colibri.model })); }
 
   stop() { try { fs.mkdirSync(this.root, { recursive: true }); fs.writeFileSync(this.stopFile, 'stopped by user'); } catch (_) {} }
 
@@ -302,7 +333,7 @@ class Growth {
       supported: !!this.baseRepo(),
       nextNote: !this.lineage.setupReady ? 'Set up growing to start.' : can.ok ? 'She grows during her next sleep.' : (can.reason || 'Growing is off.'),
       newExamples: this.examplesSince(last.at || 0),
-      generations: this.lineage.generations.slice().reverse().map((g) => ({ gen: g.gen, model: g.model, born: fmt(g.at), examples: g.examples, score: g.score == null ? '—' : Math.round(g.score * 100) + '%', status: g.status, note: g.note || '' }))
+      generations: this.lineage.generations.slice().reverse().map((g) => ({ gen: g.gen, model: g.model, born: fmt(g.at), examples: g.examples, score: g.score == null ? '—' : Math.round(g.score * 100) + '%', status: g.status, note: g.note || '', colibri: g.colibri ? (g.colibri.ok ? 'ready for Colibri' : 'not for Colibri: ' + g.colibri.why) : '' }))
     };
   }
 }

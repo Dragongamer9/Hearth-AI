@@ -1,5 +1,5 @@
 'use strict';
-// Ithil's brain: a local model running in Ollama on the Nvidia PC.
+// Ithil's brain in Ollama on the Nvidia PC. From 0.6 Ollama is the fallback: Colibri answers first (see engines.js).
 
 function extractJSON(text) {
   if (!text) return null;
@@ -20,6 +20,7 @@ class OllamaBrain {
     this.loaded = false;
     this.lastError = null;
     this.busy = 0;
+    this.stats = { tokensPerSec: null };
   }
   get url() { return (this.getSettings().ollamaUrl || 'http://127.0.0.1:11434').replace(/\/$/, ''); }
   get model() { return (this.getModel && this.getModel()) || this.getSettings().chatModel || 'huihui_ai/qwen3-abliterated:8b-v2'; }
@@ -64,6 +65,8 @@ class OllamaBrain {
       };
       if (o.json) body.format = 'json';
       if (o.think === false) body.think = false;
+      // 0.6: native tool calling (same OpenAI-style tool list the Colibri engine takes).
+      if (o.tools && o.tools.length) body.tools = o.tools;
       let j;
       try { j = await this._post('/api/chat', body, o.timeoutMs); }
       catch (e) {
@@ -72,8 +75,13 @@ class OllamaBrain {
       }
       this.loaded = true;
       this.lastError = null;
+      // 0.6: tokens per second for Settings › Her brain.
+      if (j.eval_count && j.eval_duration) this.stats = { tokensPerSec: Math.round((j.eval_count / (j.eval_duration / 1e9)) * 10) / 10, tokens: j.eval_count, at: Date.now() };
       const content = (j.message && j.message.content) || '';
-      return o.json ? (extractJSON(content) || {}) : content.replace(/<think>[\s\S]*?<\/think>/g, '').trim();
+      const text = content.replace(/<think>[\s\S]*?<\/think>/g, '').trim();
+      if (o.onToken && text) { try { o.onToken(text); } catch (_) {} }
+      if (o.tools) return { content: text, toolCalls: ((j.message && j.message.tool_calls) || []).map((c, i) => ({ id: c.id || 'call_' + i, name: c.function && c.function.name, arguments: (c.function && c.function.arguments) || {} })) };
+      return o.json ? (extractJSON(content) || {}) : text;
     } catch (e) {
       this.lastError = String(e.message || e);
       throw e;
@@ -132,7 +140,7 @@ class OllamaBrain {
 // A stand-in brain for tests and for running without Ollama. It answers in
 // the right shape so every part of the mind can be exercised.
 class FakeBrain {
-  constructor() { this.loaded = true; this.lastError = null; this.busy = 0; this.calls = []; }
+  constructor() { this.loaded = true; this.lastError = null; this.busy = 0; this.calls = []; this.stats = { tokensPerSec: null }; this.model = 'fake'; this.url = 'fake'; }
   async available() { return { ok: true, models: ['fake'] }; }
   async unload() { this.loaded = false; }
   async embed(texts) {

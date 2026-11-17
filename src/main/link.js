@@ -84,7 +84,9 @@ class Link {
       drives: { curiosity: d.curiosity, energy: d.energy, confidence: d.confidence, satisfaction: d.satisfaction, boredom: d.boredom, frustration: d.frustration },
       spotlight: s.spotlight ? s.spotlight.label : null,
       busy: !!s.activeTaskId,
-      brain: { model: this.mind.growth ? this.mind.growth.activeModel() : null, generation: this.mind.growth ? this.mind.growth.active().gen : 0 },
+      brain: Object.assign({ model: this.mind.growth ? this.mind.growth.activeModel() : null, generation: this.mind.growth ? this.mind.growth.active().gen : 0 },
+        // 0.6 (added fields only): which engine is answering (colibri | ollama) and with which model.
+        this.mind.brain && this.mind.brain.status ? (() => { const e = this.mind.brain.status(); return { engine: e.answering, engineModel: e.model || null, engineMode: e.mode, tokensPerSec: e.tokensPerSec }; })() : {}),
       expression: require('./mind/view').expression(this.mind),
       version: this.o.version || ''
     };

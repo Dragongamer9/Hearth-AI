@@ -718,7 +718,7 @@ class Mind extends EventEmitter {
       );
     } catch (e) {
       if (this.live) this.live.afterTalk({ ok: false });
-      const msg = this.store.chat.add({ id: newId('msg'), at: this.now(), role: 'ithil', text: 'I can’t reach my brain right now (Ollama isn’t answering). Is it running?', thinking: '', error: true });
+      const msg = this.store.chat.add({ id: newId('msg'), at: this.now(), role: 'ithil', text: 'I can’t reach my brain right now (' + (this.settings.get().brainEngine === 'ollama' ? 'Ollama isn’t answering' : 'neither Colibri nor Ollama is answering') + '). Is it running?', thinking: '', error: true });
       this.emit('update');
       return msg;
     }

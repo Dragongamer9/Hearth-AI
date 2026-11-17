@@ -326,7 +326,7 @@ const parts = {
     brainwarn: (s) => {
       if (s.pulling) return '<div class="banner">Downloading her brain: ' + esc(s.pulling.model) + ' · ' + esc(s.pulling.status) + (s.pulling.pct != null ? ' ' + s.pulling.pct + '%' : '') + '</div>';
       if (s.modelsMissing && s.modelsMissing.length) return '<div class="banner rowc" style="gap:12px"><span>Her brain isn’t downloaded yet (' + esc(s.modelsMissing.join(', ')) + '). It’s about 5 GB.</span><button type="button" class="btn sm primary" data-act="pullbrain">Download her brain</button></div>';
-      if (!s.brain.ok) return '<div class="banner">Her brain isn’t reachable. Make sure Ollama is running at ' + esc(s.settings.ollamaUrl) + '.</div>';
+      if (!s.brain.ok) return '<div class="banner">Her brain isn’t reachable. Make sure ' + (s.settings.brainEngine === 'ollama' ? 'Ollama is running at ' + esc(s.settings.ollamaUrl) : 'Colibri (' + esc((s.engine && s.engine.colibri && s.engine.colibri.url) || 'http://127.0.0.1:8000/v1') + ') or Ollama (' + esc(s.settings.ollamaUrl) + ') is running') + '.</div>';
       return '';
     },
     thought: (s) => '“' + esc(s.current.thought) + '”',
@@ -691,7 +691,7 @@ function render() {
   const cc = $('[data-part="ccbox"]');
   if (cc) { cc.textContent = 'AI Command Center: ' + s.commandCenter; cc.style.borderStyle = s.commandCenter === 'connected' ? 'solid' : 'dashed'; cc.style.color = s.commandCenter === 'connected' ? 'var(--sage-l)' : ''; }
   const bl = $('[data-part="brainline"]');
-  if (bl) bl.textContent = 'Brain: ' + s.brain.model + ' (gen ' + s.brain.generation + ') on your Nvidia PC (RTX 5070) · Ollama · offline' + (s.brain.ok ? '' : ' · not reachable');
+  if (bl) { const en = s.engine || {}; bl.textContent = 'Brain: ' + ((en.answering === 'colibri' && en.model) || s.brain.model) + ' (gen ' + s.brain.generation + ') on your Nvidia PC (RTX 5070) · ' + (en.answering === 'colibri' ? 'Colibri' : 'Ollama') + (en.tokensPerSec ? ' · ' + en.tokensPerSec + ' tokens/s' : '') + ' · offline' + (s.brain.ok ? '' : ' · not reachable'); }
   avatarLife(s);
   const v = document.getElementById('avatar-view'); if (v) v.className = 'view3d scene-' + (s.avatar.settings.scene || 'moon') + (s.avatar.settings.bodyType === 'drawn' ? ' drawn' : '');
   syncStage(s);

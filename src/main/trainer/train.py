@@ -156,15 +156,42 @@ def to_gguf(args):
     say("convert", 100, out)
 
 
+def merged(args):
+    """0.6: her grown brain for Colibri. Colibri can't load a LoRA adapter, so merge it into the base weights (on the
+    CPU, bf16, about 16 GB of RAM) and write one GGUF that `coli import` reads in place."""
+    import shutil, subprocess
+    import torch
+    from transformers import AutoModelForCausalLM, AutoTokenizer
+    from peft import PeftModel
+    say("colibri", 2, "Merging her growth into her base weights")
+    tmp = os.path.join(args.out_dir, "merged-hf")
+    base = AutoModelForCausalLM.from_pretrained(args.base_dir, torch_dtype=torch.bfloat16, device_map="cpu", low_cpu_mem_usage=True)
+    model = PeftModel.from_pretrained(base, os.path.join(args.out_dir, "adapter")).merge_and_unload()
+    model.save_pretrained(tmp, safe_serialization=True)
+    AutoTokenizer.from_pretrained(args.base_dir).save_pretrained(tmp)
+    del model, base
+    say("colibri", 50, "Writing one GGUF for Colibri")
+    out = os.path.join(args.out_dir, args.gguf_name or "ithil-merged-q8_0.gguf")
+    cmd = [sys.executable, os.path.join(args.llama_cpp, "convert_hf_to_gguf.py"), tmp, "--outfile", out, "--outtype", "q8_0"]
+    env = dict(os.environ, PYTHONPATH=os.path.join(args.llama_cpp, "gguf-py"))
+    r = subprocess.run(cmd, env=env, capture_output=True, text=True)
+    shutil.rmtree(tmp, ignore_errors=True)
+    if r.returncode != 0:
+        say("error", None, "GGUF conversion failed: " + (r.stderr or r.stdout)[-600:])
+        sys.exit(6)
+    say("colibri", 100, out)
+
+
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
-    ap.add_argument("command", choices=["download", "train", "gguf"])
+    ap.add_argument("command", choices=["download", "train", "gguf", "merged"])
     ap.add_argument("--base-repo", default="huihui-ai/Huihui-Qwen3-8B-abliterated-v2")
     ap.add_argument("--base-dir", required=True)
     ap.add_argument("--hf-token", default="")
     ap.add_argument("--data-dir")
     ap.add_argument("--out-dir")
     ap.add_argument("--llama-cpp")
+    ap.add_argument("--gguf-name", default="")
     ap.add_argument("--stop-file", default="/tmp/hearth-ai-stop-training")
     ap.add_argument("--max-examples", type=int, default=3000)
     ap.add_argument("--min-examples", type=int, default=150)
@@ -177,7 +204,7 @@ if __name__ == "__main__":
     ap.add_argument("--seed", type=int, default=7)
     a = ap.parse_args()
     try:
-        {"download": download, "train": train, "gguf": to_gguf}[a.command](a)
+        {"download": download, "train": train, "gguf": to_gguf, "merged": merged}[a.command](a)
     except SystemExit:
         raise
     except Exception as e:  # report every failure in the same shape

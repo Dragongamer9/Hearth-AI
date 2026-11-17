@@ -125,6 +125,7 @@ class Store {
     this.selfTests = new Collection(this.p('self-tests.jsonl'), 400);
     this.attentionLog = new Collection(this.p('attention.jsonl'), 5000);
     this.freeTime = new Collection(this.p('free-time.jsonl'), 500);
+    this.engineLog = new Collection(this.p('brain-engine.jsonl'), 500); // 0.6: every switch between Colibri and Ollama
   }
   p(...parts) {
     return path.join(this.dir, ...parts);

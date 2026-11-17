@@ -6,7 +6,8 @@ Version 0.6.
 
 ## What she needs
 
-- **Ollama** running on the PC. On first start, press **Download her brain** on the Mind screen, or pull the models yourself:
+- **Colibri** (from 0.6, her brain): [JustVugg/colibri](https://github.com/JustVugg/colibri) running `coli serve` (Hearth OS Server mode runs it as `hearth-colibri`). For the RTX 5070 (12 GB) with 32 GB of RAM, **Qwen3.6-35B-A3B** (`qwen36-35b`, 23 GB download) is the recommended model; every other Colibri model is in **Settings › Her brain**. Without Colibri she thinks with Ollama, exactly as before. See `docs/colibri.md`.
+- **Ollama** running on the PC (her fallback brain, her memory search and her sight). On first start, press **Download her brain** on the Mind screen, or pull the models yourself:
   ```
   ollama pull huihui_ai/qwen3-abliterated:8b-v2
   ollama pull nomic-embed-text
@@ -17,7 +18,7 @@ Version 0.6.
 
 ## Install
 
-Grab the AppImage or `.deb` from the build artifacts or releases. She starts when you log in and lives in the tray. Closing the window doesn't switch her off; **Quit** in the tray does. Updates come through **Settings › Check for updates**.
+Grab the `.deb` from the build artifacts or releases. She starts when you log in and lives in the tray. Closing the window doesn't switch her off; **Quit** in the tray does. Updates come through **Settings › Check for updates**.
 
 ## Her rules
 
@@ -76,6 +77,16 @@ Her settings and state keep a `.bak` of the last good file. A file that can't be
 
 `src/main/core/` also holds the rest of the core mind built by the AI Command Center team (workspace, needs, prediction, sleep, attention, confidence tags), with their tests. Those parts aren't wired into her running mind yet. Their design notes and mockups are in `docs/ithil/`.
 
+## Colibri is her brain (0.6)
+
+From 0.6 Ithil thinks with **Colibri**, and **Ollama** is her fallback. Every request goes to Colibri first (OpenAI-compatible, `http://127.0.0.1:8000/v1`, or wherever Hearth OS's `~/.config/nimbus/ai-engines.json` says). If Colibri isn't installed, isn't running, stops answering (even halfway through an answer) or its model errors, the same request goes to Ollama, so she just keeps talking: every request carries the whole conversation. Colibri then rests for 30 seconds (longer if it keeps failing) and is tried again. Every switch is logged (`~/HearthAI/brain-engine.jsonl`), shown under **Settings › Her brain**, and she notices it herself.
+
+- **Settings › Her brain:** pick **Colibri (fallback Ollama)** or **Ollama only**; see which engine is answering, its model and tokens per second; press **Test** for a real answer from each engine. Saved like every setting (signed, atomic, with a `.bak`).
+- **Every Colibri model**, from `coli setup --list` (or a copy of Colibri's catalog if `coli` isn't installed), checked against this PC's RAM and disk, the recommended one marked. **Install & use** runs `coli setup` for it; **Import a GGUF…** adds any other GGUF of a model Colibri runs (every size and quant).
+- Memory search always uses Ollama (`nomic-embed-text`): Colibri has no embeddings. Her sight uses Colibri when its model sees pictures, otherwise her Ollama sight model. Her actions (tasks, tools, body moves) are JSON answers checked by her rules and gate, the same on both engines; native tool calls work on both too.
+- **Her grown brain:** a new generation is also merged into a full GGUF and imported into Colibri (`coli import`), ready to serve. While Colibri serves another model, she thinks with her grown brain in Ollama (you can turn that off). See `docs/colibri.md`.
+- The AI Command Center's `/v1/status` now also says which engine is answering (`brain.engine`, `brain.engineModel`).
+
 ## Her files
 
 Everything lives in `~/HearthAI`: memories, thoughts, chats, dreams, her avatar, nightly backups (last 14 kept), and `training/`. That's her life written out in chat format every night, ready for fine-tuning a model of her own later.
@@ -85,7 +96,7 @@ Everything lives in `~/HearthAI`: memories, thoughts, chats, dreams, her avatar,
 ```
 npm install
 npm test            # mind tests with a stand-in brain
-npm run fake        # run the app without Ollama
-npm start           # run with Ollama
+npm run fake        # run the app without Colibri or Ollama
+npm start           # run with Colibri and/or Ollama
 npm run dist        # build AppImage + .deb
 ```
