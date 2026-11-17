@@ -15,7 +15,10 @@ const { Live } = require('./core/live');
 const { SignedSettings } = require('./core/owner');
 const selftest = require('./core/selftest');
 const { OllamaBrain, FakeBrain } = require('./mind/llm');
-const { ColibriBrain, BrainRouter, catalog: colibriCatalog, findColi, runColi, findColibri } = require('./mind/engines');
+const { ColibriBrain, BrainRouter, catalog: colibriCatalog, findColi, runColi, findColibri, loadModelList, downloadModel } = require('./mind/engines');
+// 0.6: where downloaded uncensored models go (beside Colibri's own ~/colibri-models).
+const UNCENSORED_DIR = path.join(os.homedir(), 'colibri-models', 'uncensored');
+function installedUncensored() { try { return fs.readdirSync(UNCENSORED_DIR).filter((d) => fs.existsSync(path.join(UNCENSORED_DIR, d, d + '.colibri'))); } catch (_) { return []; } }
 const { Body } = require('./mind/body');
 const { Mind } = require('./mind/engine');
 const { snapshot } = require('./mind/view');
@@ -444,7 +447,7 @@ function setupIpc() {
     const served = brain.colibri && brain.colibri.info ? brain.colibri.info.model : null;
     // Screenshots in CI can stand in for his PC's memory and disk (HEARTH_AI_FAKE only).
     const fakeGB = (k) => (process.env.HEARTH_AI_FAKE && process.env[k] ? Number(process.env[k]) * 1e9 : undefined);
-    status.colibriCatalog = await colibriCatalog({ settings: settings.get(), served, grown: mind.growth ? mind.growth.colibriReady() : [], ramTotal: fakeGB('HEARTH_AI_RAM_GB'), diskFree: fakeGB('HEARTH_AI_DISK_GB') });
+    status.colibriCatalog = await colibriCatalog({ settings: settings.get(), served, grown: mind.growth ? mind.growth.colibriReady() : [], ramTotal: fakeGB('HEARTH_AI_RAM_GB'), diskFree: fakeGB('HEARTH_AI_DISK_GB'), installed: installedUncensored() });
     mind.emit('update');
     return status.colibriCatalog;
   });
@@ -452,6 +455,37 @@ function setupIpc() {
   // (her grown brain or an imported GGUF). When Hearth OS runs Colibri, it only downloads; Hearth OS switches it.
   ipcMain.handle('colibri:install', async (_e, id) => {
     if (status.colibriInstall && status.colibriInstall.running) return { ok: false, reason: 'Already busy.' };
+    return installColibri(id);
+  });
+  // 0.6: an uncensored model from the list: download (https, resume, disk check, checksum), `coli import`, then use it.
+  // Only from his button; her mind can't reach this.
+  ipcMain.handle('colibri:download', async (_e, modelId, quant) => {
+    if (status.colibriInstall && status.colibriInstall.running) return { ok: false, reason: 'Already busy.' };
+    const cli = findColi(settings.get());
+    if (!cli) return { ok: false, reason: 'Colibri’s coli command isn’t installed. Install Colibri first (docs/colibri.md).' };
+    const list = loadModelList();
+    const m = list.models.find((x) => x.id === modelId);
+    if (!m) return { ok: false, reason: 'That model isn’t in the list.' };
+    const id = m.id + '-' + String(quant).toLowerCase();
+    status.colibriInstall = { running: true, id, line: 'Checking ' + m.name + ' ' + quant + '…' };
+    mind.emit('update');
+    try {
+      const r = await downloadModel({ model: m, quant, destRoot: UNCENSORED_DIR, onProgress: (p) => { status.colibriInstall = { running: true, id, line: p.checking ? 'Checking ' + p.file + '…' : 'Downloading ' + m.name + ' ' + quant + ': ' + p.gb + ' of ' + p.totalGb + ' GB (' + p.pct + '%)', pct: p.pct }; mind.emit('update'); } });
+      const out = path.join(r.dir, r.id + '.colibri');
+      if (!fs.existsSync(out)) {
+        status.colibriInstall = { running: true, id, line: 'coli import ' + path.basename(r.first) };
+        mind.emit('update');
+        await runColi(cli, ['import', r.first, '--out', out], (l) => { status.colibriInstall = { running: true, id, line: l.slice(0, 160) }; mind.emit('update'); });
+      }
+      status.colibriInstall = null;
+      return await installColibri(out);
+    } catch (e) {
+      status.colibriInstall = { running: false, id, ok: false, line: String(e.message || e).slice(0, 220) + ' (press it again to resume)' };
+      mind.emit('update');
+      return { ok: false, reason: status.colibriInstall.line };
+    }
+  });
+  async function installColibri(id) {
     const cli = findColi(settings.get());
     if (!cli) return { ok: false, reason: 'Colibri’s coli command isn’t installed. Install Colibri first (docs/colibri.md).' };
     const where = findColibri(settings.get());
@@ -468,7 +502,7 @@ function setupIpc() {
       return { ok: true };
     } catch (e) { status.colibriInstall = { running: false, id, ok: false, line: String(e.message || e).slice(0, 200) }; return { ok: false, reason: status.colibriInstall.line }; }
     finally { mind.emit('update'); }
-  });
+  }
   // Any GGUF of an architecture Colibri runs (every size and variant): `coli import`, then it can be used.
   ipcMain.handle('colibri:import', async () => {
     const cli = findColi(settings.get());
@@ -613,9 +647,9 @@ async function takeShots(dir) {
     fs.writeFileSync(path.join(dir, sc + '.png'), img.toPNG());
     // 0.6: Settings › Her brain and its Colibri model list sit below the first screenful.
     if (sc === 'settings') {
-      for (const [sel, name] of [['.brainc', 'settings-brain'], ['[data-part="engcat"]', 'settings-colibri-models']]) {
+      for (const [sel, name, n] of [['.brainc', 'settings-brain', 0], ['[data-part="engcat"]', 'settings-colibri-models', 0], ['h4.engg', 'settings-colibri-uncensored', 1]]) {
         try {
-          await win.webContents.executeJavaScript('(() => { const el = document.querySelector(' + JSON.stringify(sel) + '); if (el) el.scrollIntoView({ block: "start" }); })()');
+          await win.webContents.executeJavaScript('(() => { const el = document.querySelectorAll(' + JSON.stringify(sel) + ')[' + n + ']; if (el) el.scrollIntoView({ block: "start" }); })()');
           await wait(800);
           fs.writeFileSync(path.join(dir, name + '.png'), (await win.webContents.capturePage()).toPNG());
         } catch (e) { fs.appendFileSync(path.join(dir, 'console.log'), name + ': ' + (e && e.message) + '\n'); }

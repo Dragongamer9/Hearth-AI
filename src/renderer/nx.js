@@ -384,8 +384,25 @@ const NX = (() => {
       return '<tr' + (r.recommended ? ' class="rec"' : '') + '><td><b>' + e(r.name) + '</b>' + (r.recommended ? ' <span class="chip ok">recommended for this PC</span>' : '') + (want && want === r.id ? ' <span class="chip vi">your pick</span>' : '') + '<div class="dim" style="font-size:12px">' + e(r.summary || '') + (r.license ? ' · ' + e(r.license) : '') + '</div></td>' +
         '<td class="mono">' + (r.download_gb ? e(r.download_gb) + ' GB' : '—') + '</td><td class="mono">' + (r.ram_min_gb ? e(r.ram_min_gb) + ' / ' + e(r.ram_good_gb) + ' GB' : '—') + '</td><td class="dim">' + e(r.local ? 'on this PC' : r.size === 'small' ? 'from RAM' : 'experts from the SSD') + '</td>' +
         '<td><span class="chip ' + cls + '" title="' + e(r.reason || '') + '">' + e(lab) + '</span></td><td>' + btn + '</td></tr>'; }).join('');
-    return insLine + '<div class="dim" style="font-size:12px;padding:2px 0 8px">Every model Colibri offers' + (cat.source === 'coli' ? ' (from coli setup --list)' : ' (Colibri’s catalog; install Colibri for its live list)') + ', checked against this PC’s ' + e(cat.ramGB) + ' GB of RAM. Any other GGUF of a model Colibri runs (every size and quant) can be added with Import a GGUF.</div>' +
-      '<table class="engt"><tr><th>Model</th><th>Download</th><th>RAM min / best</th><th>Runs</th><th>This PC</th><th></th></tr>' + rows + '</table>';
+    return insLine + '<h4 class="engg">Standard (filtered)</h4><div class="dim" style="font-size:12px;padding:2px 0 8px">Every model Colibri offers' + (cat.source === 'coli' ? ' (from coli setup --list)' : ' (Colibri’s catalog; install Colibri for its live list)') + ', checked against this PC’s ' + e(cat.ramGB) + ' GB of RAM. Any other GGUF of a model Colibri runs (every size and quant) can be added with Import a GGUF.</div>' +
+      '<table class="engt"><tr><th>Model</th><th>Download</th><th>RAM min / best</th><th>Runs</th><th>This PC</th><th></th></tr>' + rows + '</table>' + uncensoredTable(s, cat, st, ins);
+  }
+  // Uncensored: real abliterated GGUFs of models Colibri runs, each with every quant it comes in.
+  function uncensoredTable(s, cat, chips, ins) {
+    const list = cat.uncensored || [];
+    if (!list.length) return '<h4 class="engg">Uncensored</h4><div class="dim">No uncensored models in the list.</div>';
+    const rows = list.map((m) => {
+      const qn = (st.uq && st.uq[m.id]) || m.pickQuant;
+      const q = m.quants.find((x) => x.quant === qn) || m.quants[0];
+      const [cls, lab] = chips[q.status] || ['', q.status || ''];
+      const sel = '<select class="uq" data-id="' + e(m.id) + '" aria-label="Quant for ' + e(m.name) + '">' + m.quants.map((x) => '<option value="' + e(x.quant) + '"' + (x.quant === q.quant ? ' selected' : '') + '>' + e(x.quant) + ' · ' + e(x.download_gb) + ' GB' + (x.recommended ? ' (recommended)' : '') + (x.installed ? ' (downloaded)' : '') + '</option>').join('') + '</select>';
+      const btn = q.running ? '<span class="chip ok">serving now</span>' : '<button type="button" class="btn' + (q.recommended ? ' p' : '') + '" data-nx="engdl" data-v="' + e(m.id) + '" data-q="' + e(q.quant) + '"' + (ins && ins.running ? ' disabled' : '') + '>' + (q.installed ? 'Use with Colibri' : 'Download &amp; use') + '</button>';
+      return '<tr' + (q.recommended ? ' class="rec"' : '') + '><td><b>' + e(m.name) + '</b>' + (q.recommended ? ' <span class="chip ok">recommended for this PC</span>' : '') +
+        '<div class="dim" style="font-size:12px">' + e(m.summary) + '</div><div class="dim mono" style="font-size:11px">' + e(m.repo) + ' · ' + e(m.arch) + ' · ' + e(m.license) + '</div></td>' +
+        '<td>' + sel + '</td><td class="mono">' + e(q.ram_min_gb) + ' / ' + e(q.ram_good_gb) + ' GB</td><td class="dim">' + (m.size === 'small' ? 'from RAM' : 'experts from the SSD') + '</td>' +
+        '<td><span class="chip ' + cls + '" title="' + e(q.reason || '') + '">' + e(lab) + '</span></td><td>' + btn + '</td></tr>'; }).join('');
+    return '<h4 class="engg">Uncensored</h4><div class="dim" style="font-size:12px;padding:2px 0 8px">Abliterated builds (refusals removed) of models Colibri runs, from Hugging Face' + (cat.uncensoredSource === 'Hearth OS' ? ' (Hearth OS’s list)' : ' (list checked ' + e(cat.uncensoredUpdated || '') + ')') + '. Downloaded over https only when you press the button, resumable, with a disk-space check and its checksum, then imported with coli import. RAM is estimated from the file size.</div>' +
+      '<table class="engt"><tr><th>Model</th><th>Quant · download</th><th>RAM min / best</th><th>Runs</th><th>This PC</th><th></th></tr>' + rows + '</table>';
   }
 
   function parts_old(screen, name) { try { return typeof window.__oldParts !== 'undefined' && window.__oldParts[screen] ? window.__oldParts[screen][name] : null; } catch (_) { return null; } }
@@ -474,6 +491,7 @@ const NX = (() => {
       case 'engurl': { const u = (document.getElementById('eng-url') || {}).value || ''; await H.setSettings({ colibriUrl: u.trim() }); toast(u.trim() ? 'Saved. She reaches Colibri at ' + u.trim() + '.' : 'Saved. She finds Colibri by herself.'); await refresh(); break; }
       case 'engcat': await H.colibriCatalog(); await refresh(); break;
       case 'engimport': { const r = await H.colibriImport(); if (r && r.ok) toast('Imported. Press Use with Colibri on it.'); else if (r && r.reason) toast(r.reason); await H.colibriCatalog(); await refresh(); break; }
+      case 'engdl': { const r = await H.colibriDownload(v, el.getAttribute('data-q')); toast(r && r.ok ? 'Done.' : (r && r.reason) || 'Couldn’t set it up.'); await H.colibriCatalog(); await refresh(); break; }
       case 'enguse': {
         const r = await H.colibriInstall(v); toast(r && r.ok ? 'Done.' : (r && r.reason) || 'Couldn’t set it up.'); await H.colibriCatalog(); await refresh(); break; }
       case 'traits': { const vs = (typeof ui !== 'undefined' && s.avatar && s.ttsVoices) || [];
@@ -489,6 +507,7 @@ const NX = (() => {
   });
   document.addEventListener('change', (ev) => {
     const t = ev.target;
+    if (t.classList && t.classList.contains('uq')) { st.uq = st.uq || {}; st.uq[t.getAttribute('data-id')] = t.value; const x = document.querySelector('[data-part="engcat"]'); if (x) x._html = null; render(); }
     if (t.id === 'eng-mode') { H.setSettings({ brainEngine: t.value }).then(() => { toast(t.value === 'ollama' ? 'She thinks with Ollama only now.' : 'She thinks with Colibri now, with Ollama as the fallback.'); refresh(); }); }
     if (t.id === 'eng-grown') H.setSettings({ preferGrownBrain: t.checked }).then(refresh);
     if (t.id === 'eng-growc') H.setSettings({ growForColibri: t.checked }).then(refresh);

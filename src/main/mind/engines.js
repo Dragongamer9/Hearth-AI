@@ -8,6 +8,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { spawn } = require('child_process');
+const crypto = require('crypto');
 const { extractJSON } = require('./llm');
 
 const DEFAULT_COLIBRI = 'http://127.0.0.1:8000/v1';
@@ -423,7 +424,7 @@ function assess(m, ramTotal, diskFree) {
   if (diskFree != null && diskFree < needDisk) return ['needs-disk', 'needs ' + Math.round(needDisk / GB) + ' GB free for the download; ' + Math.round(diskFree / GB) + ' GB free'];
   if (ramTotal != null && ramTotal < m.ram_good_gb * GB) return ['tight', 'runs with a small expert cache (best with ' + m.ram_good_gb + ' GB)'];
   if (m.size === 'small') return ['good', 'the whole model fits in RAM (' + m.ram_good_gb + ' GB)'];
-  return ['good', 'dense part ' + m.dense_gb + ' GB stays in RAM, the experts stream from the SSD'];
+  return ['good', (m.dense_gb ? 'dense part ' + m.dense_gb + ' GB stays in RAM, ' : '') + 'the experts stream from the SSD'];
 }
 function recommend(list, ramTotal, diskFree) {
   const rows = list.map((m) => { const [status, reason] = assess(m, ramTotal, diskFree); return Object.assign({}, m, { status, reason, fits: status === 'good' || status === 'tight', recommended: false }); });
@@ -475,9 +476,125 @@ function runColi(cli, args, onLine, timeoutMs) {
   });
 }
 
+// ---------- uncensored models (0.6): real abliterated GGUFs of models Colibri runs ----------
+
+const BUILTIN_MODELS = path.join(__dirname, '..', 'data', 'ai-models.json');
+const SHARED_MODELS = '/usr/share/hearth/ai-models.json';
+
+// One model in the list, made safe and regular: a Hugging Face repo, its GGUF files, per quant.
+function normModel(m) {
+  if (!m || typeof m !== 'object' || !/^[\w.-]+\/[\w.-]+$/.test(m.repo || '')) return null;
+  const okFile = (f) => typeof f === 'string' && /\.gguf$/i.test(f) && !f.split('/').some((x) => x === '..' || x === '' || x === '.');
+  let quants = Array.isArray(m.quants) ? m.quants : [{ quant: m.quant, files: m.files || (m.file ? [m.file] : []), download_gb: m.download_gb, ram_min_gb: m.ram_min_gb, ram_good_gb: m.ram_good_gb }];
+  quants = quants.map((q) => ({ quant: String(q.quant || '').slice(0, 32), files: (q.files || (q.file ? [q.file] : [])).filter(okFile), download_gb: Number(q.download_gb) || 0, ram_min_gb: Number(q.ram_min_gb) || 0, ram_good_gb: Number(q.ram_good_gb) || Number(q.ram_min_gb) || 0 }))
+    .filter((q) => q.quant && q.files.length && q.download_gb > 0);
+  if (!quants.length) return null;
+  return { id: String(m.id || m.repo).toLowerCase().replace(/[^a-z0-9._-]+/g, '-').slice(0, 80), name: String(m.name || m.repo), repo: m.repo, group: m.group || 'uncensored', base: m.base || '', method: m.method || '', arch: m.arch || '', engine: m.engine || '', license: m.license || '', size: m.size === 'large' ? 'large' : 'small', kind: m.kind || 'text', summary: m.summary || '', source: 'https://huggingface.co/' + m.repo, quants };
+}
+
+// Hearth OS's shared list first (Server mode publishes it), else the copy that ships with the app.
+function loadModelList(o) {
+  const opt = o || {};
+  const env = opt.env || process.env;
+  const tries = [[env.HEARTH_AI_MODELS_LIST || opt.sharedFile || SHARED_MODELS, 'Hearth OS'], [opt.builtinFile || BUILTIN_MODELS, 'built in']];
+  for (const [f, label] of tries) {
+    try {
+      const j = JSON.parse(fs.readFileSync(f, 'utf8'));
+      const list = (Array.isArray(j) ? j : j.models || []).map(normModel).filter(Boolean).filter((m) => m.group === 'uncensored');
+      if (list.length) return { source: label, file: f, updated: j.updated || '', recommend: Array.isArray(j.recommend) ? j.recommend : [], models: list };
+    } catch (_) { /* not there or unreadable: try the next */ }
+  }
+  return { source: 'none', file: null, updated: '', recommend: [], models: [] };
+}
+
+// Each quant checked with Colibri's rule; one marked for this PC (the list's own pick for this much RAM, if it fits).
+function assessUncensored(list, ramTotal, diskFree) {
+  const models = list.models.map((m) => Object.assign({}, m, { quants: m.quants.map((q) => { const [status, reason] = assess(Object.assign({ size: m.size }, q), ramTotal, diskFree); return Object.assign({}, q, { status, reason, fits: status === 'good' || status === 'tight', recommended: false }); }) }));
+  let pick = null;
+  for (const t of list.recommend) {
+    if (ramTotal != null && ramTotal < (Number(t.min_ram_gb) || 0) * GB) continue;
+    const m = models.find((x) => x.id === t.model);
+    const q = m && m.quants.find((x) => x.quant === t.quant && x.fits);
+    if (q) { pick = q; break; }
+  }
+  if (!pick) { const all = [].concat(...models.filter((m) => m.kind === 'text').map((m) => m.quants.filter((q) => q.status === 'good'))); if (all.length) pick = all.reduce((a, b) => (b.download_gb < a.download_gb ? b : a)); }
+  if (pick) pick.recommended = true;
+  for (const m of models) { const r = m.quants.find((q) => q.recommended); m.recommended = !!r; m.pickQuant = r ? r.quant : ((m.quants.filter((q) => q.fits).sort((a, b) => b.download_gb - a.download_gb)[0] || m.quants[0]).quant); }
+  models.sort((a, b) => (b.recommended - a.recommended));
+  return models;
+}
+
+// Download one quant over https, with resume (.part files and Range), a disk-space check first, and the SHA-256
+// Hugging Face publishes checked at the end. Only ever started by his button, never by her.
+async function downloadModel({ model, quant, destRoot, onProgress, fetchImpl, statfs, baseUrl, insecureForTests }) {
+  const m = normModel(model);
+  if (!m) throw new Error('That model entry isn’t valid.');
+  const q = m.quants.find((x) => x.quant === quant);
+  if (!q) throw new Error('No ' + quant + ' for ' + m.name + '.');
+  const base = (baseUrl || 'https://huggingface.co').replace(/\/+$/, '');
+  if (!/^https:\/\//.test(base) && !insecureForTests) throw new Error('Models are only downloaded over https.');
+  const f = fetchImpl || ((...a) => fetch(...a));
+  const dir = path.join(destRoot, m.id + '-' + q.quant.toLowerCase());
+  fs.mkdirSync(dir, { recursive: true });
+  const local = (file) => path.join(dir, path.basename(file));
+  const have = (file) => { try { return fs.statSync(local(file)).size; } catch (_) { try { return fs.statSync(local(file) + '.part').size; } catch (__) { return 0; } } };
+  const done = (file) => fs.existsSync(local(file)) && !fs.existsSync(local(file) + '.part');
+  const urlOf = (file) => base + '/' + m.repo + '/resolve/main/' + file.split('/').map(encodeURIComponent).join('/');
+  // What each file is (size, sha256) before anything is written.
+  const info = [];
+  for (const file of q.files) {
+    let size = null, sha = null;
+    try {
+      const h = await f(urlOf(file), { method: 'HEAD', redirect: 'manual' });
+      size = Number(h.headers.get('x-linked-size') || h.headers.get('content-length')) || null;
+      const tag = String(h.headers.get('x-linked-etag') || h.headers.get('etag') || '').replace(/^W\//, '').replace(/"/g, '');
+      if (/^[0-9a-f]{64}$/.test(tag)) sha = tag;
+    } catch (_) {}
+    info.push({ file, size, sha });
+  }
+  const total = info.reduce((n, x) => n + (x.size || 0), 0) || q.download_gb * GB;
+  const got = info.reduce((n, x) => n + (done(x.file) ? (x.size || have(x.file)) : have(x.file)), 0);
+  const need = Math.max(0, total - got) + 2 * GB;
+  let free = null;
+  try { const st = (statfs || fs.statfsSync)(dir); free = st.bavail * st.bsize; } catch (_) {}
+  if (free != null && free < need) throw new Error('Not enough disk space: it needs ' + Math.ceil(need / GB) + ' GB free in ' + dir + ', there are ' + Math.floor(free / GB) + ' GB.');
+  let sofar = got;
+  for (const x of info) {
+    if (done(x.file)) continue;
+    const part = local(x.file) + '.part';
+    let start = 0; try { start = fs.statSync(part).size; } catch (_) {}
+    if (x.size && start > x.size) { fs.truncateSync(part, 0); start = 0; }
+    if (!x.size || start < x.size) {
+      const r = await f(urlOf(x.file), { headers: start ? { range: 'bytes=' + start + '-' } : {} });
+      if (r.url && !/^https:\/\//.test(r.url) && !insecureForTests) throw new Error('The download left https.');
+      if (!(r.status === 200 || r.status === 206) || !r.body) throw new Error('Download of ' + path.basename(x.file) + ' failed (' + r.status + ').');
+      if (r.status === 200 && start) { fs.truncateSync(part, 0); sofar -= start; start = 0; }
+      const out = fs.createWriteStream(part, { flags: start ? 'a' : 'w' });
+      try {
+        const reader = r.body.getReader();
+        for (;;) {
+          const { done: end, value } = await reader.read();
+          if (end) break;
+          if (!out.write(Buffer.from(value))) await new Promise((res) => out.once('drain', res));
+          sofar += value.length;
+          if (onProgress) onProgress({ file: path.basename(x.file), pct: Math.min(100, Math.round((sofar / total) * 100)), gb: Math.round((sofar / GB) * 10) / 10, totalGb: Math.round((total / GB) * 10) / 10 });
+        }
+      } finally { await new Promise((res) => out.end(res)); }
+    }
+    if (x.sha) {
+      if (onProgress) onProgress({ file: path.basename(x.file), checking: true });
+      const h = crypto.createHash('sha256');
+      await new Promise((res, rej) => fs.createReadStream(part).on('data', (d) => h.update(d)).on('end', res).on('error', rej));
+      if (h.digest('hex') !== x.sha) { fs.renameSync(part, part + '.bad-' + Date.now()); throw new Error(path.basename(x.file) + ' didn’t match its checksum; it will download again.'); }
+    }
+    fs.renameSync(part, local(x.file));
+  }
+  return { dir, first: local(q.files[0]), id: m.id + '-' + q.quant.toLowerCase() };
+}
+
 // Every model Colibri offers, assessed for this PC, with the recommended one marked. Plus the model it serves now
 // and her own grown brains prepared for Colibri.
-async function catalog({ settings, env, regFile, run, served, grown, ramTotal, diskFree } = {}) {
+async function catalog({ settings, env, regFile, run, served, grown, ramTotal, diskFree, sharedFile, builtinFile, installed } = {}) {
   const cli = findColi(settings, env, regFile);
   let rows = null, source = 'copy';
   if (cli) {
@@ -496,7 +613,13 @@ async function catalog({ settings, env, regFile, run, served, grown, ramTotal, d
   if (served && !rows.some((r) => r.id === served)) rows.unshift({ id: served, name: served, kind: 'text', summary: 'the model Colibri is serving now', status: 'running', fits: true, recommended: false, local: true });
   for (const g of grown || []) rows.unshift({ id: g.dir, name: 'Ithil generation ' + g.gen, kind: 'text', summary: 'her own grown brain, ready for Colibri', status: 'ready', fits: true, recommended: false, local: true, grown: g.gen });
   for (const r of rows) r.running = !!served && (r.id === served || (r.local && r.id === served));
-  return { source, cli, rows, ramGB: Math.round((ramTotal == null ? os.totalmem() : ramTotal) / GB) };
+  // 0.6: the uncensored group (abliterated GGUFs), from Hearth OS's shared list or the app's own copy.
+  const ul = loadModelList({ env, sharedFile, builtinFile });
+  let free2 = diskFree;
+  if (free2 == null) { try { const st = fs.statfsSync(path.join((env || process.env).HOME || os.homedir())); free2 = st.bavail * st.bsize; } catch (_) { free2 = null; } }
+  const uncensored = assessUncensored(ul, ramTotal == null ? os.totalmem() : ramTotal, free2);
+  for (const m of uncensored) for (const q of m.quants) { const id = m.id + '-' + q.quant.toLowerCase(); q.installed = (installed || []).includes(id); q.running = !!served && served.includes(id); }
+  return { source, cli, rows, ramGB: Math.round((ramTotal == null ? os.totalmem() : ramTotal) / GB), uncensored, uncensoredSource: ul.source, uncensoredUpdated: ul.updated };
 }
 
-module.exports = { ColibriBrain, BrainRouter, EngineError, findColibri, readRegistry, registryFile, normUrl, toOpenAI, CATALOG, assess, recommend, fromColi, findColi, runColi, catalog, DEFAULT_COLIBRI };
+module.exports = { loadModelList, assessUncensored, downloadModel, normModel, ColibriBrain, BrainRouter, EngineError, findColibri, readRegistry, registryFile, normUrl, toOpenAI, CATALOG, assess, recommend, fromColi, findColi, runColi, catalog, DEFAULT_COLIBRI };

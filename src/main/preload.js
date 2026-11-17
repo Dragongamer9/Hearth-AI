@@ -61,6 +61,7 @@ contextBridge.exposeInMainWorld('hearth', {
   colibriCatalog: call('colibri:catalog'),
   colibriInstall: call('colibri:install'),
   colibriImport: call('colibri:import'),
+  colibriDownload: call('colibri:download'),
   onSnapshot: (fn) => ipcRenderer.on('snapshot', (_e, s) => fn(s)),
   onNavigate: (fn) => ipcRenderer.on('navigate', (_e, s) => fn(s))
 });

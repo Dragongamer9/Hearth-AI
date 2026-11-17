@@ -68,6 +68,39 @@ fully from RAM with the GPU for the hot experts, has thinking and tool calls, bu
 GLM-5.3 420 GB …) also start on 32 GB but answer far slower. Note: it isn't an abliterated model; for an uncensored
 Ithil on Colibri, import an abliterated Qwen3 / Qwen3.6 GGUF with **Import a GGUF…**.
 
+## Uncensored models
+
+**Settings › Her brain › Colibri models** has two groups: **Standard (filtered)** (Colibri's catalog, above) and
+**Uncensored**: abliterated GGUF builds (refusals removed) of models Colibri runs, each with every quant its repo has.
+The owner wants Ithil uncensored, so the one that fits his PC is marked.
+
+The list is a data file, `src/main/data/ai-models.json` (update it without touching code). When Hearth OS ships its
+shared list at `/usr/share/hearth/ai-models.json` (or `HEARTH_AI_MODELS_LIST` names one), that is used instead; same
+shape: `{"updated", "recommend": [{"min_ram_gb", "model", "quant"}], "models": [{"id", "group": "uncensored", "name",
+"repo", "arch", "engine", "license", "base", "method", "size": "small"|"large", "summary", "quants": [{"quant", "files":
+[…], "download_gb", "ram_min_gb", "ram_good_gb"}]}]}`. Entries with an unsafe repo or file path are dropped.
+
+Checked on Hugging Face on 2026-11-16 (repo, file names and sizes from each repo's file list):
+
+| Model | Repo | Arch (Colibri engine) | Quants | Licence |
+|---|---|---|---|---|
+| Huihui Qwen3.6-35B-A3B abliterated | `huihui-ai/Huihui-Qwen3.6-35B-A3B-abliterated-MTP-GGUF` | qwen35moe (qwen36) | Q2_K 13.2, Q3_K 17.2, **Q4_K 21.7**, Q5_K 25.3, Q6_K 29.2, Q8_0 37.8, F16 71.1 GB | apache-2.0 |
+| Qwen3-30B-A3B abliterated (mlabonne) | `mradermacher/Qwen3-30B-A3B-abliterated-GGUF` | qwen3moe (qwen36) | Q2_K … Q8_0, 11 quants, 11.3–32.5 GB | apache-2.0 |
+| Huihui Qwen3-8B abliterated v2 (her Ollama brain today) | `mradermacher/Huihui-Qwen3-8B-abliterated-v2-GGUF` | qwen3 (qwen36) | Q2_K … F16, 12 quants, 3.3–16.4 GB | apache-2.0 |
+| Huihui Qwen3.8-Flash-Next abliterated | `huihui-ai/Huihui-Qwen3.8-Flash-Next-abliterated-GGUF` | qwen4exp (qwen38) | UD-IQ4_XS 93.7 GB (3 parts), UD-Q4_K_XL 111 GB (4 parts) | qwen-community-1.0 |
+
+**Recommended for his PC (RTX 5070 12 GB, ~32 GB RAM): Huihui Qwen3.6-35B-A3B abliterated, Q4_K (21.7 GB).** It is
+the same model as Colibri's standard pick, at about the same size as Colibri's own int4 container, so it runs fully
+from RAM with room left for Ollama's embeddings and the rest of Server mode. RAM figures for these GGUFs are estimates
+from the file size (mixture of experts: about 0.43× to start, 0.9× to hold every expert; dense: the file plus 1–2 GB).
+The Qwen3.6 GGUF also carries an MTP head; Colibri's qwen36 engine reads the model either way (to be confirmed on his PC).
+
+**Download & use** (his button only; Ithil can't start it): a HEAD request per file for its size and SHA-256, a
+disk-space check (everything still to download + 2 GB), then the files over **https only** into
+`~/colibri-models/uncensored/<model>-<quant>/`, as `.part` files resumed with `Range` if stopped, each checked against
+its SHA-256 (a mismatch is set aside, never used), then `coli import <first file> --out <…>.colibri`, then the same
+setup as **Install & use**. Pressing it again after a failure resumes.
+
 ## Her grown brain and Colibri (0.2 growth)
 
 Her generations are LoRA adapters on `huihui-ai/Huihui-Qwen3-8B-abliterated-v2`, loaded into Ollama as `ithil:gen-N`.

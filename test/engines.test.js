@@ -374,3 +374,89 @@ test('her growth: a new generation is made ready for Colibri (merged GGUF + coli
   assert.equal(await none.forColibri(e3, dir, '/base'), null);
   assert.match(e3.colibri.why, /isn’t installed/);
 });
+
+// ---------- 0.6: uncensored models ----------
+const { loadModelList, assessUncensored, downloadModel } = require('../src/main/mind/engines');
+const crypto = require('crypto');
+
+test('the uncensored list ships with real repos and files only, every quant, and marks the right one for his PC', () => {
+  const j = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'src', 'main', 'data', 'ai-models.json'), 'utf8'));
+  for (const m of j.models) {
+    assert.match(m.repo, /^[\w.-]+\/[\w.-]+$/);
+    assert.ok(['qwen35moe', 'qwen3moe', 'qwen3', 'qwen4exp'].includes(m.arch), m.arch + ' is an architecture coli import takes');
+    assert.ok(m.license);
+    for (const q of m.quants) for (const f of q.files) assert.match(f, /\.gguf$/);
+  }
+  const list = loadModelList({ env: {}, sharedFile: '/nonexistent' });
+  assert.equal(list.source, 'built in');
+  const rows = assessUncensored(list, 34e9, 1500e9);
+  const rec = [].concat(...rows.map((m) => m.quants.filter((q) => q.recommended).map((q) => m.id + ' ' + q.quant)));
+  assert.deepEqual(rec, ['huihui-qwen3.6-35b-a3b-abliterated Q4_K']);
+  assert.equal(rows[0].id, 'huihui-qwen3.6-35b-a3b-abliterated');
+  // A smaller PC gets a smaller pick, still one that fits.
+  const small = assessUncensored(list, 8e9, 1500e9);
+  const r2 = [].concat(...small.map((m) => m.quants.filter((q) => q.recommended)));
+  assert.equal(r2.length, 1);
+  assert.ok(r2[0].fits);
+});
+
+test('Hearth OS’s shared list is preferred over the built-in copy; a broken one is ignored', () => {
+  const d = tmp();
+  const shared = path.join(d, 'ai-models.json');
+  fs.writeFileSync(shared, JSON.stringify({ updated: '2026-12-01', models: [{ id: 'x', group: 'uncensored', name: 'X', repo: 'someone/x-GGUF', arch: 'qwen3', license: 'mit', quants: [{ quant: 'Q4_K_M', files: ['x.Q4_K_M.gguf'], download_gb: 5, ram_min_gb: 6, ram_good_gb: 7 }] }, { group: 'uncensored', repo: 'bad/../x', quants: [{ quant: 'Q4', files: ['../../etc/passwd.gguf'], download_gb: 1 }] }] }));
+  const l = loadModelList({ env: {}, sharedFile: shared });
+  assert.equal(l.source, 'Hearth OS');
+  assert.deepEqual(l.models.map((m) => m.id), ['x'], 'unsafe entries are dropped');
+  fs.writeFileSync(shared, '{ nope');
+  assert.equal(loadModelList({ env: {}, sharedFile: shared }).source, 'built in');
+});
+
+async function fakeHub(content) {
+  const sha = crypto.createHash('sha256').update(content).digest('hex');
+  const seen = [];
+  const s = await listen((req, res) => {
+    seen.push({ method: req.method, url: req.url, range: req.headers.range || null });
+    if (req.method === 'HEAD') { res.writeHead(302, { location: '/cdn', 'x-linked-size': String(content.length), 'x-linked-etag': '"' + sha + '"' }); return res.end(); }
+    const m = /bytes=(\d+)-/.exec(req.headers.range || '');
+    if (m) { const from = Number(m[1]); res.writeHead(206, { 'content-length': content.length - from }); return res.end(content.subarray(from)); }
+    res.writeHead(200, { 'content-length': content.length }); res.end(content);
+  });
+  return Object.assign(s, { seen, base: 'http://127.0.0.1:' + s.port });
+}
+const MODEL = { id: 'tiny', group: 'uncensored', name: 'Tiny', repo: 'someone/tiny-GGUF', arch: 'qwen3', license: 'apache-2.0', quants: [{ quant: 'Q4_K_M', files: ['sub/tiny.Q4_K_M.gguf'], download_gb: 0.000001, ram_min_gb: 1, ram_good_gb: 1 }] };
+
+test('downloads: https only, disk space checked first, resumed with Range, checksum checked', async () => {
+  const content = crypto.randomBytes(200000);
+  const hub = await fakeHub(content);
+  const root = tmp();
+  try {
+    await assert.rejects(downloadModel({ model: MODEL, quant: 'Q4_K_M', destRoot: root, baseUrl: hub.base }), /https/);
+    await assert.rejects(downloadModel({ model: MODEL, quant: 'Q4_K_M', destRoot: root, baseUrl: hub.base, insecureForTests: true, statfs: () => ({ bavail: 1, bsize: 4096 }) }), /Not enough disk space/);
+    assert.equal(hub.seen.filter((x) => x.method === 'GET').length, 0, 'nothing downloaded without room');
+    // Half of it is already there from an earlier try.
+    const dir = path.join(root, 'tiny-q4_k_m');
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, 'tiny.Q4_K_M.gguf.part'), content.subarray(0, 80000));
+    const r = await downloadModel({ model: MODEL, quant: 'Q4_K_M', destRoot: root, baseUrl: hub.base, insecureForTests: true, statfs: () => ({ bavail: 1e9, bsize: 4096 }) });
+    assert.equal(r.first, path.join(dir, 'tiny.Q4_K_M.gguf'));
+    assert.ok(fs.readFileSync(r.first).equals(content));
+    const get = hub.seen.find((x) => x.method === 'GET');
+    assert.equal(get.range, 'bytes=80000-');
+    assert.equal(get.url, '/someone/tiny-GGUF/resolve/main/sub/tiny.Q4_K_M.gguf');
+    // A corrupt part is set aside, never used.
+    fs.rmSync(r.first);
+    fs.writeFileSync(path.join(dir, 'tiny.Q4_K_M.gguf.part'), Buffer.alloc(80000, 7));
+    await assert.rejects(downloadModel({ model: MODEL, quant: 'Q4_K_M', destRoot: root, baseUrl: hub.base, insecureForTests: true, statfs: () => ({ bavail: 1e9, bsize: 4096 }) }), /checksum/);
+    assert.ok(!fs.existsSync(path.join(dir, 'tiny.Q4_K_M.gguf')));
+  } finally { await hub.close(); }
+});
+
+test('the catalog shows both groups: Standard (filtered) and Uncensored', async () => {
+  const d = tmp();
+  const cat = await catalog({ settings: {}, env: { HOME: d, PATH: '' }, regFile: '/nonexistent', sharedFile: '/nonexistent', ramTotal: 34e9, diskFree: 1500e9, installed: ['huihui-qwen3.6-35b-a3b-abliterated-q4_k'] });
+  assert.equal(cat.rows.length, CATALOG.length);
+  assert.equal(cat.uncensoredSource, 'built in');
+  assert.equal(cat.uncensored.length, 4);
+  const q = cat.uncensored[0].quants.find((x) => x.quant === 'Q4_K');
+  assert.ok(q.recommended && q.installed);
+});
