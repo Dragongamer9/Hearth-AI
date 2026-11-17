@@ -227,7 +227,8 @@ class ColibriBrain {
         }
       }
       if (!done && !finish) throw new EngineError('Colibri stopped halfway through an answer', 'down');
-      const ms = Date.now() - (firstAt || t0);
+      // From the first token to the last (the whole request if it all came at once).
+      const ms = Math.max(1, Date.now() - (firstAt || t0)) < 5 ? Math.max(1, Date.now() - t0) : Date.now() - (firstAt || t0);
       const tokens = (usage && usage.completion_tokens) || chunks;
       this.stats = { tokensPerSec: tokens && ms > 0 ? Math.round((tokens / (ms / 1000)) * 10) / 10 : null, tokens, ms: Date.now() - t0, at: Date.now() };
       return { content, finish, toolCalls: calls.filter(Boolean).map((x) => ({ id: x.id, name: x.name, arguments: parseArgs(x.args) })) };
