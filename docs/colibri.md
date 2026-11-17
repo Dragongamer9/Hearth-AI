@@ -14,8 +14,15 @@ In this order (`findColibri` in `src/main/mind/engines.js`):
    She only reads it, never writes it. Any of these shapes works:
    `{"engines": [{"id": "colibri", "baseUrl": "http://127.0.0.1:8000/v1", "model": "qwen36-35b", "cli": "/path/to/coli"}]}`,
    `{"engines": {"colibri": {"url": "…"}}}`, `{"colibri": {"port": 8000}}`. `baseUrl`, `base_url`, `url` or `port`;
-   `/v1` is added when it's missing. An entry from this file counts as "managed by Hearth OS": she never stops or starts
-   that Colibri, and installing a model only downloads it.
+   `/v1` is added when it's missing. Hearth OS (feature/colibri) runs Colibri on **`http://127.0.0.1:11440/v1`**
+   (not Colibri's own 8000, so it never meets Ollama) and writes
+   `{"default", "colibri": {model, modelsDir}, "engines": [{"id": "ollama", …}, {"id": "colibri", "baseUrl", "model",
+   "cli", "setupHome", "modelsDir", "use"}]}`. An entry from this file counts as "managed by Hearth OS": she never stops
+   or starts that Colibri herself. **Install & use** runs `coli setup --model ID --yes --reconfigure --no-browser
+   --no-start` with `COLI_SETUP_HOME=<setupHome>`, then the registry's `use` command
+   (`/usr/bin/python3 /usr/share/nimbus/desktop/shell/hearth-colibri use ID`). A model folder (a downloaded uncensored
+   model, an imported GGUF, her grown brain) is `coli import … --out <modelsDir>/<ID>`, then `hearth-colibri use ID
+   FOLDER`. Downloaded GGUFs sit in `<modelsDir>/gguf/<ID>/`, the layout `hearth-colibri remove-model` knows.
 3. `HEARTH_COLIBRI_URL` in the environment.
 4. `http://127.0.0.1:8000/v1`.
 
@@ -75,7 +82,8 @@ Ithil on Colibri, import an abliterated Qwen3 / Qwen3.6 GGUF with **Import a GGU
 The owner wants Ithil uncensored, so the one that fits his PC is marked.
 
 The list is a data file, `src/main/data/ai-models.json` (update it without touching code). When Hearth OS ships its
-shared list at `/usr/share/hearth/ai-models.json` (or `HEARTH_AI_MODELS_LIST` names one), that is used instead; same
+shared list at `/usr/share/hearth/ai-models.json` (or `HEARTH_AI_MODELS_LIST` names one), that is used instead (it has
+more families, exact file sizes in `bytes`, and Colibri's catalog under `standard`, used when `coli` can't be asked); same
 shape: `{"updated", "recommend": [{"min_ram_gb", "model", "quant"}], "models": [{"id", "group": "uncensored", "name",
 "repo", "arch", "engine", "license", "base", "method", "size": "small"|"large", "summary", "quants": [{"quant", "files":
 […], "download_gb", "ram_min_gb", "ram_good_gb"}]}]}`. Entries with an unsafe repo or file path are dropped.
@@ -97,9 +105,9 @@ The Qwen3.6 GGUF also carries an MTP head; Colibri's qwen36 engine reads the mod
 
 **Download & use** (his button only; Ithil can't start it): a HEAD request per file for its size and SHA-256, a
 disk-space check (everything still to download + 2 GB), then the files over **https only** into
-`~/colibri-models/uncensored/<model>-<quant>/`, as `.part` files resumed with `Range` if stopped, each checked against
-its SHA-256 (a mismatch is set aside, never used), then `coli import <first file> --out <…>.colibri`, then the same
-setup as **Install & use**. Pressing it again after a failure resumes.
+`<modelsDir>/gguf/<model>-<quant>/` (`~/colibri-models` without Hearth OS), as `.part` files resumed with `Range` if stopped, each checked against
+its SHA-256 (a mismatch is set aside, never used), then `coli import <first file> --out <modelsDir>/<model>-<quant>`, then
+`hearth-colibri use <model>-<quant> <folder>` (or `coli setup --model-dir` without Hearth OS). Pressing it again after a failure resumes.
 
 ## Her grown brain and Colibri (0.2 growth)
 

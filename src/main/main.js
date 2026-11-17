@@ -16,9 +16,14 @@ const { SignedSettings } = require('./core/owner');
 const selftest = require('./core/selftest');
 const { OllamaBrain, FakeBrain } = require('./mind/llm');
 const { ColibriBrain, BrainRouter, catalog: colibriCatalog, findColi, runColi, findColibri, loadModelList, downloadModel } = require('./mind/engines');
-// 0.6: where downloaded uncensored models go (beside Colibri's own ~/colibri-models).
-const UNCENSORED_DIR = path.join(os.homedir(), 'colibri-models', 'uncensored');
-function installedUncensored() { try { return fs.readdirSync(UNCENSORED_DIR).filter((d) => fs.existsSync(path.join(UNCENSORED_DIR, d, d + '.colibri'))); } catch (_) { return []; } }
+// 0.6: Colibri's models folder: Hearth OS's (ai-engines.json modelsDir) or ~/colibri-models. Downloaded GGUFs go in
+// <models>/gguf/<id>/ and `coli import` makes <models>/<id>/, the layout hearth-colibri adopts and removes.
+const DEFAULT_USE = ['/usr/bin/python3', '/usr/share/nimbus/desktop/shell/hearth-colibri', 'use'];
+function colibriEntry() { const w = findColibri(settings.get()); return w.managed ? w.entry : null; }
+function modelsRoot() { const e = colibriEntry(); return (e && e.modelsDir) || path.join(os.homedir(), 'colibri-models'); }
+function coliEnv() { const e = colibriEntry(); return e && e.setupHome ? { COLI_SETUP_HOME: e.setupHome } : {}; }
+function installedUncensored() { const r = modelsRoot(); try { return fs.readdirSync(r).filter((d) => fs.existsSync(path.join(r, d, 'gguf.json'))); } catch (_) { return []; } }
+const folderId = (f) => path.basename(f).replace(/\.colibri$/i, '').toLowerCase().replace(/[^a-z0-9._-]+/g, '-').replace(/^[^a-z0-9]+/, '').slice(0, 64) || 'imported';
 const { Body } = require('./mind/body');
 const { Mind } = require('./mind/engine');
 const { snapshot } = require('./mind/view');
@@ -447,7 +452,7 @@ function setupIpc() {
     const served = brain.colibri && brain.colibri.info ? brain.colibri.info.model : null;
     // Screenshots in CI can stand in for his PC's memory and disk (HEARTH_AI_FAKE only).
     const fakeGB = (k) => (process.env.HEARTH_AI_FAKE && process.env[k] ? Number(process.env[k]) * 1e9 : undefined);
-    status.colibriCatalog = await colibriCatalog({ settings: settings.get(), served, grown: mind.growth ? mind.growth.colibriReady() : [], ramTotal: fakeGB('HEARTH_AI_RAM_GB'), diskFree: fakeGB('HEARTH_AI_DISK_GB'), installed: installedUncensored() });
+    status.colibriCatalog = await colibriCatalog({ settings: settings.get(), served, grown: mind.growth ? mind.growth.colibriReady() : [], ramTotal: fakeGB('HEARTH_AI_RAM_GB'), diskFree: fakeGB('HEARTH_AI_DISK_GB'), installed: installedUncensored(), coliEnv: coliEnv() });
     mind.emit('update');
     return status.colibriCatalog;
   });
@@ -470,34 +475,43 @@ function setupIpc() {
     status.colibriInstall = { running: true, id, line: 'Checking ' + m.name + ' ' + quant + '…' };
     mind.emit('update');
     try {
-      const r = await downloadModel({ model: m, quant, destRoot: UNCENSORED_DIR, onProgress: (p) => { status.colibriInstall = { running: true, id, line: p.checking ? 'Checking ' + p.file + '…' : 'Downloading ' + m.name + ' ' + quant + ': ' + p.gb + ' of ' + p.totalGb + ' GB (' + p.pct + '%)', pct: p.pct }; mind.emit('update'); } });
-      const out = path.join(r.dir, r.id + '.colibri');
-      if (!fs.existsSync(out)) {
+      const r = await downloadModel({ model: m, quant, destRoot: path.join(modelsRoot(), 'gguf'), onProgress: (p) => { status.colibriInstall = { running: true, id, line: p.checking ? 'Checking ' + p.file + '…' : 'Downloading ' + m.name + ' ' + quant + ': ' + p.gb + ' of ' + p.totalGb + ' GB (' + p.pct + '%)', pct: p.pct }; mind.emit('update'); } });
+      const out = path.join(modelsRoot(), r.id);
+      if (!fs.existsSync(path.join(out, 'gguf.json'))) {
         status.colibriInstall = { running: true, id, line: 'coli import ' + path.basename(r.first) };
         mind.emit('update');
-        await runColi(cli, ['import', r.first, '--out', out], (l) => { status.colibriInstall = { running: true, id, line: l.slice(0, 160) }; mind.emit('update'); });
+        await runColi(cli, ['import', r.first, '--out', out], (l) => { status.colibriInstall = { running: true, id, line: l.slice(0, 160) }; mind.emit('update'); }, 0, coliEnv());
       }
       status.colibriInstall = null;
-      return await installColibri(out);
+      return await installColibri(r.id, out);
     } catch (e) {
       status.colibriInstall = { running: false, id, ok: false, line: String(e.message || e).slice(0, 220) + ' (press it again to resume)' };
       mind.emit('update');
       return { ok: false, reason: status.colibriInstall.line };
     }
   });
-  async function installColibri(id) {
+  // id: a catalog id (qwen36-35b), or a model folder (an import, her grown brain), or (id, folder).
+  // With Hearth OS: `coli setup --model ID --no-start` (COLI_SETUP_HOME from ai-engines.json) for a catalog id, then
+  // ai-engines.json's "use" command: `hearth-colibri use ID` or `hearth-colibri use ID FOLDER`. Hearth OS switches it.
+  async function installColibri(idOrFolder, folderArg) {
     const cli = findColi(settings.get());
     if (!cli) return { ok: false, reason: 'Colibri’s coli command isn’t installed. Install Colibri first (docs/colibri.md).' };
     const where = findColibri(settings.get());
-    const folder = typeof id === 'string' && id.startsWith('/');
-    const args = ['setup', folder ? '--model-dir' : '--model', String(id), '--yes', '--reconfigure', '--no-browser'].concat(where.managed ? ['--no-start'] : ['--background']);
-    status.colibriInstall = { running: true, id, line: 'starting' };
-    mind.emit('update');
+    const folder = folderArg || (String(idOrFolder).startsWith('/') ? String(idOrFolder) : '');
+    const id = folderArg ? String(idOrFolder) : folder ? folderId(folder) : String(idOrFolder);
+    const say = (l) => { status.colibriInstall = { running: true, id, line: String(l).slice(0, 160) }; mind.emit('update'); };
+    say('starting');
     try {
-      if (!where.managed) { try { await runColi(cli, ['stop'], null, 60000); } catch (_) {} }
-      await runColi(cli, args, (l) => { status.colibriInstall = { running: true, id, line: l.slice(0, 160) }; mind.emit('update'); });
-      signedSet({ colibriModel: String(id) });
-      status.colibriInstall = { running: false, id, ok: true, line: where.managed ? 'Downloaded. Hearth OS’s Colibri service switches to it when it restarts (Server mode).' : 'Colibri is serving it now.' };
+      if (where.managed) {
+        if (!folder) await runColi(cli, ['setup', '--model', id, '--yes', '--reconfigure', '--no-browser', '--no-start'], say, 0, coliEnv());
+        const use = (where.entry && where.entry.use && where.entry.use.length) ? where.entry.use : DEFAULT_USE;
+        await runColi(use, folder ? [id, folder] : [id], say, 120000);
+      } else {
+        try { await runColi(cli, ['stop'], null, 60000); } catch (_) {}
+        await runColi(cli, ['setup', folder ? '--model-dir' : '--model', folder || id, '--yes', '--reconfigure', '--no-browser', '--background'], say);
+      }
+      signedSet({ colibriModel: id });
+      status.colibriInstall = { running: false, id, ok: true, line: where.managed ? 'Hearth OS’s Colibri now serves ' + id + '.' : 'Colibri is serving ' + id + ' now.' };
       await checkServices();
       return { ok: true };
     } catch (e) { status.colibriInstall = { running: false, id, ok: false, line: String(e.message || e).slice(0, 200) }; return { ok: false, reason: status.colibriInstall.line }; }
@@ -512,10 +526,11 @@ function setupIpc() {
     status.colibriInstall = { running: true, id: r.filePaths[0], line: 'coli import' };
     mind.emit('update');
     try {
-      const out = await runColi(cli, ['import', r.filePaths[0]], (l) => { status.colibriInstall = { running: true, id: r.filePaths[0], line: l.slice(0, 160) }; mind.emit('update'); });
-      const dir = (String(out).match(/(\/[^\s'"]+\.colibri)\b/) || [])[1] || r.filePaths[0].replace(/(-0+1-of-\d+)?\.gguf$/i, '.colibri');
-      status.colibriInstall = { running: false, ok: true, id: dir, line: 'Imported: ' + dir + '. Press Use with Colibri to serve it.', imported: dir };
-      return { ok: true, dir };
+      const id = folderId(path.basename(r.filePaths[0]).replace(/(-0+1-of-\d+)?\.gguf$/i, ''));
+      const dir = path.join(modelsRoot(), id);
+      await runColi(cli, ['import', r.filePaths[0], '--out', dir], (l) => { status.colibriInstall = { running: true, id, line: l.slice(0, 160) }; mind.emit('update'); }, 0, coliEnv());
+      status.colibriInstall = null;
+      return await installColibri(folderId(dir), dir);
     } catch (e) { status.colibriInstall = { running: false, ok: false, line: String(e.message || e).slice(0, 200) }; return { ok: false, reason: status.colibriInstall.line }; }
     finally { mind.emit('update'); }
   });

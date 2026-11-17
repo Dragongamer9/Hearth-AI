@@ -51,6 +51,11 @@ function readRegistry(file) {
     model: x.model || x.modelId || null,
     managedBy: x.managedBy || x.service || 'hearth-os',
     cli: x.cli || x.coli || null,
+    // Hearth OS (feature/colibri): COLI_SETUP_HOME for `coli setup`, its models folder, and the command that switches
+    // the model hearth-colibri serves (an argument list, e.g. ["/usr/bin/python3", ".../hearth-colibri", "use"]).
+    setupHome: typeof x.setupHome === 'string' ? x.setupHome : null,
+    modelsDir: typeof x.modelsDir === 'string' ? x.modelsDir : null,
+    use: Array.isArray(x.use) ? x.use.map(String) : typeof x.use === 'string' && x.use.trim() ? x.use.trim().split(/\s+/) : null,
     enabled: x.enabled !== false
   }));
   return { ok: true, file: f, engines };
@@ -463,16 +468,19 @@ function findColi(settings, env, regFile) {
   return null;
 }
 
-function runColi(cli, args, onLine, timeoutMs) {
+function runColi(cli, args, onLine, timeoutMs, extraEnv) {
   return new Promise((resolve, reject) => {
-    const child = spawn(cli, args, { stdio: ['ignore', 'pipe', 'pipe'], env: Object.assign({}, process.env, { COLI_NO_BROWSER: '1' }) });
+    // Never through a shell: the command and its arguments as a list.
+    const cmd = Array.isArray(cli) ? cli[0] : cli;
+    const all = Array.isArray(cli) ? cli.slice(1).concat(args) : args;
+    const child = spawn(cmd, all, { stdio: ['ignore', 'pipe', 'pipe'], env: Object.assign({}, process.env, { COLI_NO_BROWSER: '1' }, extraEnv || {}) });
     let out = '', err = '';
     const t = timeoutMs ? setTimeout(() => { try { child.kill('SIGTERM'); } catch (_) {} }, timeoutMs) : null;
     const feed = (which) => (d) => { const s = d.toString(); if (which === 'out') out += s; else err += s; if (onLine) for (const l of s.split('\n')) if (l.trim()) onLine(l.trim()); };
     child.stdout.on('data', feed('out'));
     child.stderr.on('data', feed('err'));
     child.on('error', (e) => { if (t) clearTimeout(t); reject(e); });
-    child.on('close', (code) => { if (t) clearTimeout(t); code === 0 ? resolve(out) : reject(new Error('coli ' + args[0] + ' failed (' + code + '): ' + (err || out).trim().split('\n').slice(-3).join(' ').slice(0, 300))); });
+    child.on('close', (code) => { if (t) clearTimeout(t); code === 0 ? resolve(out) : reject(new Error(path.basename(String(Array.isArray(cli) ? cli[cli.length - 1] : 'coli')) + ' ' + args[0] + ' failed (' + code + '): ' + (err || out).trim().split('\n').slice(-3).join(' ').slice(0, 300))); });
   });
 }
 
@@ -486,7 +494,7 @@ function normModel(m) {
   if (!m || typeof m !== 'object' || !/^[\w.-]+\/[\w.-]+$/.test(m.repo || '')) return null;
   const okFile = (f) => typeof f === 'string' && /\.gguf$/i.test(f) && !f.split('/').some((x) => x === '..' || x === '' || x === '.');
   let quants = Array.isArray(m.quants) ? m.quants : [{ quant: m.quant, files: m.files || (m.file ? [m.file] : []), download_gb: m.download_gb, ram_min_gb: m.ram_min_gb, ram_good_gb: m.ram_good_gb }];
-  quants = quants.map((q) => ({ quant: String(q.quant || '').slice(0, 32), files: (q.files || (q.file ? [q.file] : [])).filter(okFile), download_gb: Number(q.download_gb) || 0, ram_min_gb: Number(q.ram_min_gb) || 0, ram_good_gb: Number(q.ram_good_gb) || Number(q.ram_min_gb) || 0 }))
+  quants = quants.map((q) => ({ quant: String(q.quant || '').slice(0, 32), files: (q.files || (q.file ? [q.file] : [])).filter(okFile), bytes: Array.isArray(q.bytes) ? q.bytes.map(Number) : null, download_gb: Number(q.download_gb) || 0, ram_min_gb: Number(q.ram_min_gb) || 0, ram_good_gb: Number(q.ram_good_gb) || Number(q.ram_min_gb) || 0 }))
     .filter((q) => q.quant && q.files.length && q.download_gb > 0);
   if (!quants.length) return null;
   return { id: String(m.id || m.repo).toLowerCase().replace(/[^a-z0-9._-]+/g, '-').slice(0, 80), name: String(m.name || m.repo), repo: m.repo, group: m.group || 'uncensored', base: m.base || '', method: m.method || '', arch: m.arch || '', engine: m.engine || '', license: m.license || '', size: m.size === 'large' ? 'large' : 'small', kind: m.kind || 'text', summary: m.summary || '', source: 'https://huggingface.co/' + m.repo, quants };
@@ -501,10 +509,12 @@ function loadModelList(o) {
     try {
       const j = JSON.parse(fs.readFileSync(f, 'utf8'));
       const list = (Array.isArray(j) ? j : j.models || []).map(normModel).filter(Boolean).filter((m) => m.group === 'uncensored');
-      if (list.length) return { source: label, file: f, updated: j.updated || '', recommend: Array.isArray(j.recommend) ? j.recommend : [], models: list };
+      // Hearth OS's list also carries Colibri's catalog under "standard" (coli setup --list --all --json rows).
+      const standard = j.standard && Array.isArray(j.standard.models) ? j.standard.models.filter((r) => r && r.id).map(fromColi) : [];
+      if (list.length) return { source: label, file: f, updated: j.updated || '', recommend: Array.isArray(j.recommend) ? j.recommend : [], models: list, standard };
     } catch (_) { /* not there or unreadable: try the next */ }
   }
-  return { source: 'none', file: null, updated: '', recommend: [], models: [] };
+  return { source: 'none', file: null, updated: '', recommend: [], models: [], standard: [] };
 }
 
 // Each quant checked with Colibri's rule; one marked for this PC (the list's own pick for this much RAM, if it fits).
@@ -550,6 +560,7 @@ async function downloadModel({ model, quant, destRoot, onProgress, fetchImpl, st
       const tag = String(h.headers.get('x-linked-etag') || h.headers.get('etag') || '').replace(/^W\//, '').replace(/"/g, '');
       if (/^[0-9a-f]{64}$/.test(tag)) sha = tag;
     } catch (_) {}
+    if (!size && q.bytes && q.bytes[q.files.indexOf(file)]) size = q.bytes[q.files.indexOf(file)];
     info.push({ file, size, sha });
   }
   const total = info.reduce((n, x) => n + (x.size || 0), 0) || q.download_gb * GB;
@@ -594,17 +605,20 @@ async function downloadModel({ model, quant, destRoot, onProgress, fetchImpl, st
 
 // Every model Colibri offers, assessed for this PC, with the recommended one marked. Plus the model it serves now
 // and her own grown brains prepared for Colibri.
-async function catalog({ settings, env, regFile, run, served, grown, ramTotal, diskFree, sharedFile, builtinFile, installed } = {}) {
+async function catalog({ settings, env, regFile, run, served, grown, ramTotal, diskFree, sharedFile, builtinFile, installed, coliEnv } = {}) {
   const cli = findColi(settings, env, regFile);
   let rows = null, source = 'copy';
+  const ul = loadModelList({ env, sharedFile, builtinFile });
   if (cli) {
     try {
-      const out = await (run || runColi)(cli, ['setup', '--list', '--all', '--json'], null, 60000);
+      const out = await (run || runColi)(cli, ['setup', '--list', '--all', '--json'], null, 60000, coliEnv);
       const s = out.indexOf('['), e = out.lastIndexOf(']');
       const j = JSON.parse(out.slice(s, e + 1));
       if (Array.isArray(j) && j.length) { rows = j.map(fromColi); source = 'coli'; }
     } catch (_) { rows = null; }
   }
+  // Without `coli`: Hearth OS's copy of Colibri's catalog (with its fit for this PC), else the app's own copy.
+  if (!rows && ul.source === 'Hearth OS' && ul.standard.length) { rows = ul.standard; source = 'Hearth OS'; }
   if (!rows) {
     let free = diskFree;
     if (free == null) { try { const st = fs.statfsSync(path.join((env || process.env).HOME || os.homedir())); free = st.bavail * st.bsize; } catch (_) { free = null; } }
@@ -614,7 +628,6 @@ async function catalog({ settings, env, regFile, run, served, grown, ramTotal, d
   for (const g of grown || []) rows.unshift({ id: g.dir, name: 'Ithil generation ' + g.gen, kind: 'text', summary: 'her own grown brain, ready for Colibri', status: 'ready', fits: true, recommended: false, local: true, grown: g.gen });
   for (const r of rows) r.running = !!served && (r.id === served || (r.local && r.id === served));
   // 0.6: the uncensored group (abliterated GGUFs), from Hearth OS's shared list or the app's own copy.
-  const ul = loadModelList({ env, sharedFile, builtinFile });
   let free2 = diskFree;
   if (free2 == null) { try { const st = fs.statfsSync(path.join((env || process.env).HOME || os.homedir())); free2 = st.bavail * st.bsize; } catch (_) { free2 = null; } }
   const uncensored = assessUncensored(ul, ramTotal == null ? os.totalmem() : ramTotal, free2);

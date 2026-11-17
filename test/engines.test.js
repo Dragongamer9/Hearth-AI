@@ -460,3 +460,33 @@ test('the catalog shows both groups: Standard (filtered) and Uncensored', async 
   const q = cat.uncensored[0].quants.find((x) => x.quant === 'Q4_K');
   assert.ok(q.recommended && q.installed);
 });
+
+test('Hearth OS’s ai-engines.json (feature/colibri): Colibri on 11440, with its setup home, models folder and use command', () => {
+  const d = tmp();
+  const reg = path.join(d, 'ai-engines.json');
+  fs.writeFileSync(reg, JSON.stringify({ default: 'ollama', colibri: { model: 'qwen36-35b', modelsDir: '/home/x/colibri-models' },
+    engines: [{ id: 'ollama', baseUrl: 'http://127.0.0.1:11434/v1' }, { id: 'colibri', baseUrl: 'http://127.0.0.1:11440/v1', model: 'qwen36-35b', cli: '/home/x/.local/share/hearth/colibri/engine/c/coli', setupHome: '/home/x/.local/share/hearth/colibri/setup', modelsDir: '/home/x/colibri-models', use: ['/usr/bin/python3', '/usr/share/nimbus/desktop/shell/hearth-colibri', 'use'] }] }));
+  const w = findColibri({}, {}, reg);
+  assert.equal(w.url, 'http://127.0.0.1:11440/v1');
+  assert.equal(w.managed, true);
+  assert.equal(w.entry.setupHome, '/home/x/.local/share/hearth/colibri/setup');
+  assert.equal(w.entry.modelsDir, '/home/x/colibri-models');
+  assert.deepEqual(w.entry.use, ['/usr/bin/python3', '/usr/share/nimbus/desktop/shell/hearth-colibri', 'use']);
+  assert.equal(w.entry.cli, '/home/x/.local/share/hearth/colibri/engine/c/coli');
+});
+
+test('Hearth OS’s shared list gives both groups: its standard catalog is used when coli isn’t installed', async () => {
+  const d = tmp();
+  const shared = path.join(d, 'ai-models.json');
+  fs.writeFileSync(shared, JSON.stringify({ schema: 1, updated: '2026-11-16', groups: [{ id: 'standard', label: 'Standard (filtered)' }, { id: 'uncensored', label: 'Uncensored' }],
+    recommend: [{ min_ram_gb: 24, model: 'huihui-qwen3.6-35b-a3b-abliterated', quant: 'Q4_K' }],
+    models: [{ id: 'huihui-qwen3.6-35b-a3b-abliterated', group: 'uncensored', name: 'Huihui Qwen3.6-35B-A3B abliterated', repo: 'huihui-ai/Huihui-Qwen3.6-35B-A3B-abliterated-MTP-GGUF', arch: 'qwen35moe', license: 'apache-2.0', size: 'small', kind: 'text',
+      quants: [{ quant: 'Q4_K', files: ['Huihui-Qwen3.6-35B-A3B-abliterated-ggml-model-Q4_K.gguf'], bytes: [21712409824], download_gb: 21.7, ram_min_gb: 9, ram_good_gb: 20 }] }],
+    standard: { source: 'colibri setup --list --all --json', models: [{ id: 'qwen36-35b', name: 'Qwen3.6-35B-A3B', download_gb: 23.1, ram_min_gb: 10, ram_good_gb: 20, kind: 'text', runs: 'from RAM', summary: 's', status: 'good', fits: true, recommended: true }] } }));
+  const cat = await catalog({ settings: {}, env: { HOME: d, PATH: '' }, regFile: '/nonexistent', sharedFile: shared, ramTotal: 34e9, diskFree: 1500e9 });
+  assert.equal(cat.source, 'Hearth OS');
+  assert.deepEqual(cat.rows.map((r) => r.id), ['qwen36-35b']);
+  assert.equal(cat.uncensoredSource, 'Hearth OS');
+  assert.equal(cat.uncensored[0].quants[0].bytes[0], 21712409824);
+  assert.ok(cat.uncensored[0].quants[0].recommended);
+});
