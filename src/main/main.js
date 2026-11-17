@@ -611,6 +611,16 @@ async function takeShots(dir) {
     await wait(600);
     const img = await win.webContents.capturePage();
     fs.writeFileSync(path.join(dir, sc + '.png'), img.toPNG());
+    // 0.6: Settings › Her brain and its Colibri model list sit below the first screenful.
+    if (sc === 'settings') {
+      for (const [sel, name] of [['.brainc', 'settings-brain'], ['[data-part="engcat"]', 'settings-colibri-models']]) {
+        try {
+          await win.webContents.executeJavaScript('(() => { const el = document.querySelector(' + JSON.stringify(sel) + '); if (el) el.scrollIntoView({ block: "start" }); })()');
+          await wait(800);
+          fs.writeFileSync(path.join(dir, name + '.png'), (await win.webContents.capturePage()).toPNG());
+        } catch (e) { fs.appendFileSync(path.join(dir, 'console.log'), name + ': ' + (e && e.message) + '\n'); }
+      }
+    }
     win.setContentSize(1440, 960);
   }
   quitting = true;
