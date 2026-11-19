@@ -1,0 +1,82 @@
+name: Release (draft)
+
+# Hearth AI's releases, for the Hearth Store (Hearth OS 1.16) and anyone who downloads her by hand.
+# Runs ONLY when the owner pushes a version tag like v0.6.0 (he picks every version number; nothing here picks,
+# bumps or tags one). It builds and tests on GitHub, then makes a DRAFT release with:
+#   Hearth-AI-<version>-x86_64.AppImage   what the Hearth Store installs (in ~/.local/share/hearth/store/apps/hearth-ai)
+#   Hearth-AI-<version>-amd64.deb
+#   latest-linux.yml                      electron-builder's description of the release
+#   SHA256SUMS.txt                        the SHA-256 of the AppImage and the .deb: the Store checks every download
+#                                         against it and throws away a file that doesn't match
+# A draft is invisible to everyone (and to the Store) until the owner presses Publish on GitHub.
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: The tag must match package.json's version
+        run: |
+          pkg="v$(node -p "require('./package.json').version")"
+          if [ "$pkg" != "$GITHUB_REF_NAME" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME does not match package.json ($pkg). Nothing released."; exit 1
+          fi
+
+      - run: npm ci
+      - run: npm test
+      - run: npm run bundle
+      - run: npx electron-builder --linux AppImage deb --x64 --publish never
+
+      - name: Check the files and write SHA256SUMS.txt
+        run: |
+          set -euo pipefail
+          f=$(ls dist/*.AppImage)
+          d=$(ls dist/*.deb)
+          file "$f" | grep -q ELF
+          test "$(stat -c%s "$f")" -gt 30000000
+          dpkg-deb --info "$d" >/dev/null
+          grep -q "url: $(basename "$f")" dist/latest-linux.yml
+          (cd dist && sha256sum "$(basename "$f")" "$(basename "$d")") | tee dist/SHA256SUMS.txt
+          grep -qE '^[0-9a-f]{64}  .*\.AppImage$' dist/SHA256SUMS.txt
+          grep -qE '^[0-9a-f]{64}  .*\.deb$' dist/SHA256SUMS.txt
+
+      - name: Make the draft release with its files
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          # Notes: release-notes/<tag>.md if there is one (what's new: the Store shows it), else a short line.
+          old=$(gh api "repos/$REPO/releases?per_page=50" --jq ".[] | select(.draft and .tag_name==\"$TAG\") | .id")
+          if [ -f "release-notes/$TAG.md" ]; then cp "release-notes/$TAG.md" notes.md
+          elif [ -n "$old" ]; then gh api "repos/$REPO/releases/$(echo "$old" | head -1)" --jq .body > notes.md
+          else echo "Hearth AI ${TAG#v}" > notes.md; fi
+          { printf '\nSHA-256:\n'; sed 's/^/    /' dist/SHA256SUMS.txt; } >> notes.md
+          # An earlier unpublished draft for this tag is replaced (drafts are private).
+          for id in $old; do gh api -X DELETE "repos/$REPO/releases/$id"; done
+          rel=$(jq -n --arg tag "$TAG" --arg sha "$GITHUB_SHA" --arg name "Hearth AI ${TAG#v}" --rawfile body notes.md \
+            '{tag_name:$tag, target_commitish:$sha, name:$name, body:$body, draft:true, prerelease:false}' \
+            | gh api -X POST "repos/$REPO/releases" --input - --jq .id)
+          for f in dist/*.AppImage dist/*.deb dist/latest-linux.yml dist/SHA256SUMS.txt; do
+            curl -sSf -X POST -H "Authorization: Bearer $GH_TOKEN" -H "Content-Type: application/octet-stream" \
+              --data-binary @"$f" "https://uploads.github.com/repos/$REPO/releases/$rel/assets?name=$(basename "$f")" > /dev/null
+            echo "uploaded $(basename "$f")"
+          done
+          echo "::notice::Draft $TAG is ready. Press Publish on GitHub to release it (the Hearth Store then offers it)."

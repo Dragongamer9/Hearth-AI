@@ -20,6 +20,12 @@ Version 0.6.
 
 Grab the `.deb` from the build artifacts or releases. She starts when you log in and lives in the tray. Closing the window doesn't switch her off; **Quit** in the tray does. Updates come through **Settings › Check for updates**.
 
+**Releases (for the Hearth Store).** When the owner pushes a version tag (`v0.6.0`, his number, matching
+package.json), `.github/workflows/release.yml` builds and tests her and makes a **draft** GitHub release with the
+AppImage, the .deb, `latest-linux.yml` and `SHA256SUMS.txt`. Nothing is public until he presses Publish. Hearth OS's
+Hearth Store (1.16) reads the newest published release, installs the AppImage in `~/.local/share/hearth/store/apps/hearth-ai`
+and checks it against `SHA256SUMS.txt` first. Put what's new in `release-notes/<tag>.md`: the Store shows it.
+
 ## Her rules
 
 These are enforced in code (`src/main/mind/rules.js`, with the core gate in `src/main/core/gate.js`), not just told to her:
