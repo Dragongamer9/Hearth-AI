@@ -42,6 +42,16 @@ class Link {
 
   start() {
     this.stop();
+    // Hearth OS Server mode (on this PC only) can put her to sleep: the owner's "Put her to sleep" on his dashboard.
+    const local = /^(::1|127\.|::ffff:127\.)/.test(String(req.socket.remoteAddress || ''));
+    if (req.method === 'POST' && u.pathname === '/v1/sleep') {
+      if (!local) return this.send(res, 403, { error: 'Only Hearth on this PC can put her to sleep.' });
+      if (this.mind.state.status === 'sleeping') return this.send(res, 200, { ok: true, already: true });
+      this.mind.moment('He put me to sleep from Server mode.', 'self');
+      this.mind.sleep();
+      return this.send(res, 200, { ok: true });
+    }
+    this.noteClient(String(req.headers['x-client'] || 'AI Command Center'), req.socket.remoteAddress);
     const st = this.settings.get();
     if (st.allowCommandCenter === false) return;
     const host = st.allowLanConnections ? '0.0.0.0' : '127.0.0.1';
@@ -77,6 +87,23 @@ class Link {
     return a.length === b.length && crypto.timingSafeEqual(a, b);
   }
 
+  // Who reached her, for Hearth OS Server mode's "Reach her from" (~/HearthAI/link-clients.json; names and how, no keys).
+  noteClient(name, addr) {
+    const now = Date.now(), key = String(name).slice(0, 60);
+    this.seen = this.seen || {};
+    const a = String(addr || '').replace(/^::ffff:/, '');
+    const via = /^(127\.|::1$)/.test(a) ? 'this PC' : /^100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\./.test(a) ? 'Tailscale' : 'home network';
+    const prev = this.seen[key];
+    this.seen[key] = { at: now, via };
+    if (prev && prev.via === via && now - prev.at < 60000) return;
+    try {
+      const file = this.mind.store.p('link-clients.json');
+      const tmp = file + '.' + process.pid + '.tmp';
+      require('fs').writeFileSync(tmp, JSON.stringify(this.seen));
+      require('fs').renameSync(tmp, file);
+    } catch (_) {}
+  }
+
   status() {
     const s = this.mind.state, d = s.drives;
     return {
@@ -101,6 +128,16 @@ class Link {
     const u = new URL(req.url, 'http://x');
     if (u.pathname === '/v1/hello') return this.send(res, 200, { app: 'hearth-ai', name: this.mind.state.name, version: this.o.version || '', auth: 'Bearer token from ~/HearthAI/connect.json' });
     if (!this.authed(req)) return this.send(res, 401, { error: 'Missing or wrong key. Read it from ~/HearthAI/connect.json.' });
+    // Hearth OS Server mode (on this PC only) can put her to sleep: the owner's "Put her to sleep" on his dashboard.
+    const local = /^(::1|127\.|::ffff:127\.)/.test(String(req.socket.remoteAddress || ''));
+    if (req.method === 'POST' && u.pathname === '/v1/sleep') {
+      if (!local) return this.send(res, 403, { error: 'Only Hearth on this PC can put her to sleep.' });
+      if (this.mind.state.status === 'sleeping') return this.send(res, 200, { ok: true, already: true });
+      this.mind.moment('He put me to sleep from Server mode.', 'self');
+      this.mind.sleep();
+      return this.send(res, 200, { ok: true });
+    }
+    this.noteClient(String(req.headers['x-client'] || 'AI Command Center'), req.socket.remoteAddress);
     const st = this.settings.get();
     if (st.allowCommandCenter === false) return this.send(res, 403, { error: 'He turned off Command Center connections.' });
     this.lastSeen = Date.now();
@@ -121,7 +158,8 @@ class Link {
     if (req.method === 'POST' && u.pathname === '/v1/talk') {
       const b = await this.body(req);
       if (!b.text) return this.send(res, 400, { error: 'text is required' });
-      const who = b.from || from;
+      // Hearth OS Server mode on this PC talks for him (his own words), not as a teammate.
+      const who = local && from === 'Hearth Server mode' ? null : (b.from || from);
       const msg = await this.mind.talk(b.text, { from: who, via: 'command-center' });
       return this.send(res, 200, { reply: msg.text, mood: this.mind.state.current.mood, error: !!msg.error });
     }

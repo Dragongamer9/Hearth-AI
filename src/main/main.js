@@ -627,6 +627,7 @@ app.whenReady().then(() => {
   const img = nativeImage.createFromPath(iconPath());
   tray = new Tray(img.isEmpty() ? nativeImage.createEmpty() : img.resize({ width: 22, height: 22 }));
   tray.on('click', () => showMain());
+  if (screenArg(process.argv)) setTimeout(() => showMain(screenArg(process.argv)), 1500);
   updateTray();
   if (process.env.HEARTH_AI_SHOTS) takeShots(process.env.HEARTH_AI_SHOTS);
 });
@@ -676,6 +677,8 @@ async function takeShots(dir) {
   app.exit(0);
 }
 
-app.on('second-instance', () => showMain());
+// Started again (or from Hearth OS Server mode's "Talk to her" / "Her settings"): her window, on --screen=… if given.
+const screenArg = (argv) => { const a = (argv || []).find((x) => /^--screen=(talk|settings|mind|memory|avatar)$/.test(String(x))); return a ? a.slice(9) : null; };
+app.on('second-instance', (_e, argv) => showMain(screenArg(argv)));
 app.on('window-all-closed', (e) => { /* keep living in the tray */ });
 app.on('before-quit', () => { quitting = true; if (link) link.stop(); if (mind) mind.stop(); if (journal) journal.close(); });
