@@ -21,8 +21,15 @@ class OllamaBrain {
     this.lastError = null;
     this.busy = 0;
     this.stats = { tokensPerSec: null };
+    this.found = null;
   }
-  get url() { return (this.getSettings().ollamaUrl || 'http://127.0.0.1:11434').replace(/\/$/, ''); }
+  // 0.7: an address he set himself wins; else the Ollama she found by herself (discover.js: this PC, then his Hearth
+  // devices on Tailscale), never saved; else this PC's.
+  get url() {
+    const mine = String(this.getSettings().ollamaUrl || '').trim().replace(/\/+$/, '');
+    if (mine && mine !== 'http://127.0.0.1:11434') return mine;
+    return (this.found && this.found.url) || 'http://127.0.0.1:11434';
+  }
   get model() { return (this.getModel && this.getModel()) || this.getSettings().chatModel || 'huihui_ai/qwen3-abliterated:8b-v2'; }
 
   async _post(path, body, timeoutMs) {

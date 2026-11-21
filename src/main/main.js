@@ -82,6 +82,18 @@ function setupMind() {
   // 0.6: Colibri is her brain, Ollama the fallback (src/main/mind/engines.js).
   const grownModel = () => (mind && mind.growth && mind.growth.active().gen > 0 ? mind.growth.activeModel() : null);
   const ollama = process.env.HEARTH_AI_FAKE ? new FakeBrain() : new OllamaBrain(getSettings, () => (mind && mind.growth ? mind.growth.activeModel() : null));
+  // 0.7: her brain connects by itself (mind/discover.js): at start and every 5 minutes; nothing found is saved.
+  if (!process.env.HEARTH_AI_FAKE) {
+    const { findOllama } = require('./mind/discover');
+    const look = () => findOllama({ settings: getSettings() }).then((f) => {
+      const was = ollama.found && ollama.found.url;
+      ollama.found = f;
+      if (f.url !== was) console.log('[ithil] her Ollama: ' + f.url + ' (' + f.source + ')');
+    }).catch(() => {});
+    look();
+    const t = setInterval(look, 5 * 60 * 1000);
+    if (t.unref) t.unref();
+  }
   const colibri = process.env.HEARTH_AI_FAKE ? fakeColibri() : new ColibriBrain(getSettings);
   brain = new BrainRouter({
     getSettings, colibri, ollama, grownModel,
