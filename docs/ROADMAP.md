@@ -2,7 +2,7 @@
 
 The owner picks every version number; items here wait for his.
 
-## Planned for the next version
+## Planned for 0.7 (the owner's number, Nov 21, 2026)
 
 - [ ] Her brain connects by itself (the owner, Nov 21, 2026: "All these connections need to be automatic and from now
   on i shouldnt need to connect any manuel setting or adresses or keys", and "Needs to be added to ithel as well"):
